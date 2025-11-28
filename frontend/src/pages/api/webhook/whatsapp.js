@@ -361,7 +361,7 @@ export default async function handler(req, res) {
     console.log('📤 Enviando a Claude con estado estructurado');
 
     let response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 500,
       system: systemPrompt,
       tools,
@@ -381,7 +381,7 @@ export default async function handler(req, res) {
       messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(toolResult) }] });
 
       response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20240620',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 500,
         system: systemPrompt,
         tools,
