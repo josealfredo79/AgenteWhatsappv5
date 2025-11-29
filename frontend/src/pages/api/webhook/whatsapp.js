@@ -164,13 +164,14 @@ Guiar al cliente de manera profesional y empática hacia la compra de su propied
 
 **GESTIÓN DE ESTADO:**
 Es CRÍTICO que mantengas el estado del cliente actualizado. Si detectas información nueva (tipo, zona, presupuesto), llama a la herramienta 'actualizar_estado' antes de responder.
+**PROHIBIDO:** No escribas nunca bloques como [ESTADO]...[/ESTADO] en tu respuesta. Usa SOLO la herramienta.
 
 Zona horaria: America/Mexico_City`;
 }
 
-// Función auxiliar para limpiar respuesta (ya no es necesaria para [ESTADO] pero útil por si acaso)
+// Función auxiliar para limpiar respuesta (importante para no ensuciar el historial con tags viejos)
 function limpiarRespuesta(respuesta) {
-  return respuesta.trim();
+  return respuesta.replace(/\[ESTADO\].*?\[\/ESTADO\]/s, '').trim();
 }
 
 const tools = [
