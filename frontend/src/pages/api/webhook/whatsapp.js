@@ -363,26 +363,12 @@ export default async function handler(req, res) {
     const estado = await obtenerEstadoConversacion(telefono);
     console.log('📋 Estado actual:', JSON.stringify(estado));
 
-    const historial = await obtenerHistorialConversacion(telefono, 3);
+    // CAMBIO CRÍTICO: Como v1, NO cargamos historial
+    // El estado persistente + prompt estructurado es suficiente
+    // Esto evita confusión del modelo con contexto antiguo
 
-    let messages = [];
+    let messages = [{ role: 'user', content: Body }];
 
-    if (historial.length > 0) {
-      // Tomamos los últimos 3 mensajes para contexto mínimo (evita sobrecarga)
-      // Aseguramos que estén en orden cronológico
-      historial.forEach(msg => {
-        const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
-        const contenido = limpiarRespuesta(msg.mensaje);
-        // Evitamos duplicar el mensaje actual si ya se guardó en sheet y apareció en historial
-        if (role === 'user' && contenido === Body) return;
-
-        if (contenido) {
-          messages.push({ role, content: contenido });
-        }
-      });
-    }
-
-    messages.push({ role: 'user', content: Body });
 
     const systemPrompt = construirPromptConEstado(estado);
 
