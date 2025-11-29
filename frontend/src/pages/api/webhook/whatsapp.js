@@ -357,6 +357,40 @@ export default async function handler(req, res) {
 
   await guardarMensajeEnSheet({ telefono, direccion: 'inbound', mensaje: Body, messageId: MessageSid });
 
+  // Detectar saludos simples y responder directamente sin Claude (como v1)
+  const mensajeNormalizado = Body.toLowerCase().trim();
+  const saludosSimples = /^(hola|hi|hello|hey|buenos días|buenas tardes|buenas noches|qué tal|cómo estás|que tal|como estas|saludos|hola\?|hola!|👋|hola 👋)$/i;
+
+  if (saludosSimples.test(mensajeNormalizado)) {
+    console.log('👋 Saludo simple detectado, respondiendo directamente');
+
+    const respuestasSaludos = [
+      '¡Hola! 👋 ¿Buscas comprar, rentar o invertir en alguna propiedad?',
+      '¡Hola! 😊 ¿Qué tipo de propiedad te interesa?',
+      '¡Buenas! ✨ ¿En qué puedo ayudarte con tu búsqueda inmobiliaria?'
+    ];
+
+    const respuestaRandom = respuestasSaludos[Math.floor(Math.random() * respuestasSaludos.length)];
+
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const twilioMsg = await client.messages.create({
+      from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
+      to: From,
+      body: respuestaRandom
+    });
+
+    console.log('✅ Saludo enviado directamente, SID:', twilioMsg.sid);
+
+    await guardarMensajeEnSheet({
+      telefono,
+      direccion: 'outbound',
+      mensaje: respuestaRandom,
+      messageId: twilioMsg.sid
+    });
+
+    return res.status(200).json({ success: true, sid: twilioMsg.sid, direct: true });
+  }
+
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -375,8 +409,8 @@ export default async function handler(req, res) {
     console.log('📤 Enviando a Claude con estado estructurado');
 
     let response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 500,
+      model: 'claude-haiku-4-5',
+      max_tokens: 300,
       system: systemPrompt,
       tools,
       messages
@@ -418,8 +452,8 @@ export default async function handler(req, res) {
       messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(toolResult) }] });
 
       response = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 500,
+        model: 'claude-haiku-4-5',
+        max_tokens: 300,
         system: construirPromptConEstado(estado), // Reconstruimos el prompt con el nuevo estado por si acaso
         tools,
         messages
