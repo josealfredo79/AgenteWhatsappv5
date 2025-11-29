@@ -163,7 +163,10 @@ Guiar al cliente de manera profesional y empática hacia la compra de su propied
 - Si el cliente saluda, responde el saludo y ofrece ayuda.
 
 **GESTIÓN DE ESTADO:**
-Es CRÍTICO que mantengas el estado del cliente actualizado. Si detectas información nueva (tipo, zona, presupuesto), llama a la herramienta 'actualizar_estado' antes de responder.
+Es CRÍTICO que mantengas el estado del cliente actualizado.
+1. En cuanto detectes CUALQUIER dato nuevo (tipo, zona, presupuesto), llama a la herramienta 'actualizar_estado' INMEDIATAMENTE.
+2. No esperes a tener todos los datos. Guarda lo que tengas.
+3. Si el cliente corrige un dato, usa la herramienta para actualizarlo.
 **PROHIBIDO:** No escribas nunca bloques como [ESTADO]...[/ESTADO] en tu respuesta. Usa SOLO la herramienta.
 
 Zona horaria: America/Mexico_City`;
@@ -376,14 +379,23 @@ export default async function handler(req, res) {
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
       } else if (toolUse.name === 'actualizar_estado') {
-        // Fusionar estado actual con nuevos datos
-        const nuevoEstado = { ...estado, ...toolUse.input, telefono };
+        // Fusionar estado actual con nuevos datos de forma INCREMENTAL
+        // Solo sobrescribimos si el nuevo valor no está vacío
+        const input = toolUse.input;
+        const nuevoEstado = { ...estado };
+
+        if (input.tipo_propiedad) nuevoEstado.tipo_propiedad = input.tipo_propiedad;
+        if (input.zona) nuevoEstado.zona = input.zona;
+        if (input.presupuesto) nuevoEstado.presupuesto = input.presupuesto;
+        if (input.etapa) nuevoEstado.etapa = input.etapa;
+        if (input.resumen) nuevoEstado.resumen = input.resumen;
+
+        nuevoEstado.telefono = telefono;
+
         const saveResult = await guardarEstadoConversacion(nuevoEstado);
         toolResult = { success: saveResult.success, estado_actualizado: nuevoEstado };
-        // Actualizamos la variable local 'estado' para que el prompt siguiente (si hubiera) lo tenga, 
-        // aunque en este loop el systemPrompt ya se generó. 
-        // Idealmente deberíamos regenerar el systemPrompt si quisiéramos inmediatez absoluta,
-        // pero para el flujo conversacional basta con saber que ya se guardó.
+
+        // Actualizamos la variable local 'estado' para el resto del ciclo
         Object.assign(estado, nuevoEstado);
       }
 
