@@ -412,11 +412,17 @@ export default async function handler(req, res) {
     }
 
     const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
-    const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
+    let respuestaLimpia = limpiarRespuesta(respuestaCompleta);
 
+    // Si la respuesta está vacía después de usar herramientas, generamos una respuesta automática
     if (!respuestaLimpia) {
-      console.warn('⚠️ La respuesta de Claude estaba vacía después de procesar herramientas. No se enviará mensaje a Twilio.');
-      return res.status(200).json({ success: true, warning: 'Empty response' });
+      console.warn('⚠️ La respuesta de Claude estaba vacía. Generando respuesta de fallback.');
+      // Verificamos si se actualizó el estado recientemente para dar una respuesta coherente
+      if (estado.tipo_propiedad || estado.zona) {
+        respuestaLimpia = "Entendido. He actualizado tus preferencias. ¿Hay algún otro detalle que te gustaría agregar?";
+      } else {
+        respuestaLimpia = "Entendido. ¿En qué más puedo ayudarte?";
+      }
     }
 
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
