@@ -414,6 +414,11 @@ export default async function handler(req, res) {
     const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
     const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
 
+    if (!respuestaLimpia) {
+      console.warn('⚠️ La respuesta de Claude estaba vacía después de procesar herramientas. No se enviará mensaje a Twilio.');
+      return res.status(200).json({ success: true, warning: 'Empty response' });
+    }
+
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
