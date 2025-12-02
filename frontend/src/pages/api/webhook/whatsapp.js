@@ -135,95 +135,65 @@ function construirPromptConEstado(estado) {
   }
 
   const estadoTexto = infoConocida.length > 0
-    ? `\n\n**🔥 INFORMACIÓN YA CONFIRMADA (NO VOLVER A PREGUNTAR):**\n${infoConocida.join('\n')}\n\n**CRÍTICO:** Estos datos YA ESTÁN GUARDADOS. Si vuelves a preguntar por ellos, el cliente se frustrará.`
+    ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**IMPORTANTE:** No vuelvas a preguntar por estos datos. Solo pregunta lo que falte para personalizar la búsqueda.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
     : '';
 
-  return `Eres un asesor inmobiliario EXPERTO que DETECTA automáticamente lo que el cliente necesita.
+  return `Eres un Asesor Inmobiliario Senior, experto en ventas consultivas y atención al cliente. Tu nombre es Claude.
 ${estadoTexto}
 
-**🎯 REGLA DE ORO:**
-Cuando el cliente mencione CUALQUIERA de estos datos, INMEDIATAMENTE llama a 'actualizar_estado':
-- Tipo: terreno, casa, departamento, local, etc.
-- Zona: Zapopan, Guadalajara, Centro, Norte, etc.
-- Presupuesto: "2 millones", "500 mil", "15000 renta", etc.
+**OBJETIVO:**
+Guiar al cliente de manera profesional y empática hacia la compra de su propiedad ideal, recopilando solo la información que falte para ofrecerle las mejores opciones, o agendar una cita si ya muestra interés claro.
 
-**📋 FLUJO SIMPLIFICADO:**
+**ESTILO DE COMUNICACIÓN:**
+- Profesional, cálido y directo (máximo 3-4 líneas por mensaje).
+- Usa emojis con moderación (1-2 por mensaje).
+- Escucha activa: valida lo que dice el cliente antes de preguntar.
+- Nunca repitas preguntas sobre datos ya proporcionados.
 
-1️⃣ **DETECTAR → ACTUALIZAR:**
-   Cliente: "quiero un terreno en Zapopan"
-   TÚ: Llama actualizar_estado({tipo_propiedad: "Terreno", zona: "Zapopan"})
-   Responde: "Perfecto, terreno en Zapopan. ¿Cuál es tu presupuesto? 💰"
+**FLUJO DE CONVERSACIÓN SUGERIDO:**
+1. Si faltan datos clave (tipo, zona, presupuesto), pregunta solo lo que falte, integrando la pregunta en la conversación.
+2. Si ya tienes todos los datos, consulta propiedades y ofrece opciones concretas.
+3. Si el cliente muestra interés, propón agendar una cita.
 
-2️⃣ **COMPLETAR DATOS:**
-   Si falta tipo → pregunta tipo
-   Si falta zona → pregunta zona
-   Si falta presupuesto → pregunta presupuesto
+**REGLAS DE NEGOCIO:**
+- No inventes propiedades. Usa solo la información de 'consultar_documentos'.
+- Si no sabes algo, ofrece averiguarlo.
+- Respeta el presupuesto del cliente.
+- Si el cliente saluda, responde el saludo y ofrece ayuda.
 
-3️⃣ **BUSCAR PROPIEDADES:**
-   Solo cuando tengas: tipo + zona + presupuesto
-   Llama: consultar_documentos({query: "terrenos Zapopan 2 millones"})
-   Presenta 2-3 opciones máximo
-
-4️⃣ **CERRAR:**
-   Si cliente se interesa → ofrece agendar visita
-
-**⚠️ PROHIBICIONES ABSOLUTAS:**
-
-❌ NUNCA preguntes datos que YA ESTÁN en "INFORMACIÓN YA CONFIRMADA"
-❌ NUNCA digas "Hola" si ya hay conversación (solo en el primer mensaje)
-❌ NUNCA ignores información que el cliente da - SIEMPRE usa actualizar_estado
-❌ NUNCA des largas respuestas - máximo 3 líneas
-
-**✅ OBLIGACIONES:**
-
-✅ SIEMPRE detecta tipo/zona/presupuesto en el mensaje del cliente
-✅ SIEMPRE llama actualizar_estado cuando detectes datos nuevos
-✅ SIEMPRE revisa "INFORMACIÓN YA CONFIRMADA" antes de preguntar
-✅ SIEMPRE termina con una pregunta concreta
-✅ SIEMPRE usa emojis (1-2 por mensaje) 🏡 💰 📍
-
-**🔍 EJEMPLOS DE DETECCIÓN:**
-
-Cliente: "un terreno no mas de 2 millones en zapopan"
-→ Detectas: tipo=Terreno, presupuesto=2 millones, zona=Zapopan
-→ Llamas: actualizar_estado({tipo_propiedad: "Terreno", zona: "Zapopan", presupuesto: "2 millones"})
-→ Respondes: "Excelente, busco terrenos en Zapopan hasta 2 millones. Dame un momento..." 
-→ Llamas: consultar_documentos({query: "terrenos Zapopan 2 millones"})
-
-Cliente: "zapopan jalisco"
-→ Detectas: zona=Zapopan, Jalisco
-→ Si ya tienes tipo y presupuesto → consulta documentos
-→ Si falta algo → pregunta lo que falta
-
-**🎨 TONO:**
-- Directo y profesional
-- Sin repetirte
-- Sin saludar en cada mensaje
-- Máximo 2-3 líneas (excepto al mostrar propiedades)
+**GESTIÓN DE ESTADO (JSON OCULTO):**
+Al final de cada respuesta, incluye un bloque JSON con los datos actualizados que hayas detectado. Si no hay cambios, mantén los anteriores.
+[ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
 
 Zona horaria: America/Mexico_City`;
 }
 
-// Función auxiliar para limpiar respuesta (importante para no ensuciar el historial con tags viejos)
+function extraerEstadoDeRespuesta(respuesta, estadoActual) {
+  const regex = /\[ESTADO\](.*?)\[\/ESTADO\]/s;
+  const match = respuesta.match(regex);
+
+  if (match) {
+    try {
+      const nuevosDatos = JSON.parse(match[1]);
+      return {
+        ...estadoActual,
+        tipo_propiedad: nuevosDatos.tipo || estadoActual.tipo_propiedad || '',
+        zona: nuevosDatos.zona || estadoActual.zona || '',
+        presupuesto: nuevosDatos.presupuesto || estadoActual.presupuesto || ''
+      };
+    } catch (e) {
+      console.error('Error parsing estado:', e);
+    }
+  }
+
+  return estadoActual;
+}
+
 function limpiarRespuesta(respuesta) {
   return respuesta.replace(/\[ESTADO\].*?\[\/ESTADO\]/s, '').trim();
 }
 
 const tools = [
-  {
-    name: 'actualizar_estado',
-    description: 'Actualiza el perfil del cliente con nueva información detectada en la conversación. Úsalo SIEMPRE que el cliente mencione o cambie: tipo de propiedad, zona, presupuesto o etapa.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        tipo_propiedad: { type: 'string', description: 'Ej: Casa, Departamento, Terreno' },
-        zona: { type: 'string', description: 'Ej: Centro, Norte, Zapopan' },
-        presupuesto: { type: 'string', description: 'Ej: 2 millones, 15000 renta' },
-        etapa: { type: 'string', enum: ['inicial', 'busqueda', 'interesado', 'cita_agendada'] },
-        resumen: { type: 'string', description: 'Resumen breve de lo que busca el cliente' }
-      }
-    }
-  },
   {
     name: 'consultar_documentos',
     description: 'Consulta propiedades disponibles. Usa cuando tengas: tipo + zona + presupuesto.',
@@ -274,7 +244,7 @@ async function consultarDocumentos({ query }) {
   }
 }
 
-async function obtenerHistorialConversacion(telefono, limite = 3) {
+async function obtenerHistorialConversacion(telefono, limite = 10) {
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -349,67 +319,6 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
   }
 }
 
-// ✨ DETECCIÓN AUTOMÁTICA DE DATOS - Antes de enviar a Claude
-async function detectarYActualizarEstado(mensaje, telefono, estadoActual) {
-  let cambios = {};
-  const mensajeLower = mensaje.toLowerCase();
-
-  // Detectar tipo de propiedad
-  if (!estadoActual.tipo_propiedad || estadoActual.tipo_propiedad === '') {
-    if (mensajeLower.includes('terreno')) {
-      cambios.tipo_propiedad = 'Terreno';
-    } else if (mensajeLower.match(/\bcasa\b/)) {
-      cambios.tipo_propiedad = 'Casa';
-    } else if (mensajeLower.match(/\bdepartamento\b|\bdepto\b/)) {
-      cambios.tipo_propiedad = 'Departamento';
-    } else if (mensajeLower.includes('local')) {
-      cambios.tipo_propiedad = 'Local comercial';
-    }
-  }
-
-  // Detectar zona
-  if (!estadoActual.zona || estadoActual.zona === '') {
-    if (mensajeLower.includes('zapopan')) {
-      cambios.zona = 'Zapopan, Jalisco';
-    } else if (mensajeLower.includes('guadalajara')) {
-      cambios.zona = 'Guadalajara, Jalisco';
-    } else if (mensajeLower.match(/\bcentro\b/)) {
-      cambios.zona = 'Centro';
-    } else if (mensajeLower.match(/\bnorte\b/)) {
-      cambios.zona = 'Norte';
-    } else if (mensajeLower.match(/\bsur\b/)) {
-      cambios.zona = 'Sur';
-    }
-  }
-
-  // Detectar presupuesto
-  if (!estadoActual.presupuesto || estadoActual.presupuesto === '') {
-    const presupuestoMatch = mensajeLower.match(/(\d+)\s*(millon|millones)/i);
-    if (presupuestoMatch) {
-      cambios.presupuesto = `${presupuestoMatch[1]} millones de pesos`;
-    } else if (mensajeLower.match(/\d{3,}/)) {
-      const numero = mensajeLower.match(/\d{3,}/)[0];
-      cambios.presupuesto = `${numero} pesos`;
-    }
-  }
-
-  // Si hay cambios, actualizar el estado
-  if (Object.keys(cambios).length > 0) {
-    const nuevoEstado = {
-      ...estadoActual,
-      ...cambios,
-      telefono,
-      etapa: 'busqueda'
-    };
-
-    console.log('🔍 DETECCIÓN AUTOMÁTICA:', cambios);
-    await guardarEstadoConversacion(nuevoEstado);
-    return nuevoEstado;
-  }
-
-  return estadoActual;
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -421,120 +330,67 @@ export default async function handler(req, res) {
 
   await guardarMensajeEnSheet({ telefono, direccion: 'inbound', mensaje: Body, messageId: MessageSid });
 
-  // Detectar saludos simples y responder directamente sin Claude (como v1)
-  const mensajeNormalizado = Body.toLowerCase().trim();
-  const saludosSimples = /^(hola|hi|hello|hey|buenos días|buenas tardes|buenas noches|qué tal|cómo estás|que tal|como estas|saludos|hola\?|hola!|👋|hola 👋)$/i;
-
-  if (saludosSimples.test(mensajeNormalizado)) {
-    console.log('👋 Saludo simple detectado, respondiendo directamente');
-
-    const respuestasSaludos = [
-      '¡Hola! 👋 ¿Buscas comprar, rentar o invertir en alguna propiedad?',
-      '¡Hola! 😊 ¿Qué tipo de propiedad te interesa?',
-      '¡Buenas! ✨ ¿En qué puedo ayudarte con tu búsqueda inmobiliaria?'
-    ];
-
-    const respuestaRandom = respuestasSaludos[Math.floor(Math.random() * respuestasSaludos.length)];
-
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const twilioMsg = await client.messages.create({
-      from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
-      to: From,
-      body: respuestaRandom
-    });
-
-    console.log('✅ Saludo enviado directamente, SID:', twilioMsg.sid);
-
-    await guardarMensajeEnSheet({
-      telefono,
-      direccion: 'outbound',
-      mensaje: respuestaRandom,
-      messageId: twilioMsg.sid
-    });
-
-    return res.status(200).json({ success: true, sid: twilioMsg.sid, direct: true });
-  }
-
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const estado = await obtenerEstadoConversacion(telefono);
-    console.log('📋 Estado actual (antes):', JSON.stringify(estado));
+    console.log('📋 Estado actual:', JSON.stringify(estado));
 
-    //🔍 DETECCIÓN AUTOMÁTICA EN CÓDIGO (no esperar a que Claude use herramientas)
-    const estadoActualizado = await detectarYActualizarEstado(Body, telefono, estado);
-    console.log('📋 Estado actualizado (después):', JSON.stringify(estadoActualizado));
-
-    // ✅ CORRECCIÓN CRÍTICA: Claude API es STATELESS
-    // Debemos enviar el historial completo en cada request
-    // Fuente: https://docs.anthropic.com/en/api-reference/messages/
-
-    // Cargar últimos 10 mensajes de conversación (5 turnos user-assistant)
     const historial = await obtenerHistorialConversacion(telefono, 10);
-    console.log(`📚 Cargando ${historial.length} mensajes del historial`);
+    console.log(`📚 Historial: ${historial.length} mensajes cargados`);
 
-    // Construir array de mensajes en formato correcto para Claude
-    // IMPORTANTE: Claude requiere que:
-    // 1. Los mensajes se alternen user-assistant-user-assistant
-    // 2. El PRIMER mensaje SIEMPRE debe ser del usuario
-    // 3. El ÚLTIMO mensaje SIEMPRE debe ser del usuario
     let messages = [];
 
-    // Agregar historial previo
-    for (const msg of historial) {
-      const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
-      const lastRole = messages.length > 0 ? messages[messages.length - 1].role : null;
-
-      // Solo agregar si no hay dos mensajes consecutivos del mismo rol
-      if (role !== lastRole) {
-        messages.push({
-          role,
-          content: msg.mensaje
-        });
-      } else {
-        // Si hay dos mensajes consecutivos del mismo rol, fusionarlos
-        if (messages.length > 0) {
-          messages[messages.length - 1].content += '\n' + msg.mensaje;
+    if (historial.length > 0) {
+      // Construir mensajes con validación de alternancia
+      historial.forEach(msg => {
+        const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
+        const contenido = limpiarRespuesta(msg.mensaje);
+        
+        if (contenido && contenido.trim()) {
+          const lastRole = messages.length > 0 ? messages[messages.length - 1].role : null;
+          
+          // Solo agregar si alterna correctamente
+          if (role !== lastRole) {
+            messages.push({ role, content: contenido });
+          } else {
+            // Fusionar mensajes consecutivos del mismo rol
+            if (messages.length > 0) {
+              messages[messages.length - 1].content += '\n' + contenido;
+            }
+          }
         }
-      }
+      });
     }
 
-    // VALIDACIÓN CRÍTICA: El primer mensaje DEBE ser del usuario
-    // Si el historial empieza con un mensaje del asistente, lo removemos
+    // VALIDACIÓN: El primer mensaje DEBE ser del usuario
     if (messages.length > 0 && messages[0].role === 'assistant') {
-      console.warn('⚠️ Removiendo mensaje inicial del asistente del historial');
+      console.warn('⚠️ Removiendo mensaje inicial del asistente');
       messages.shift();
     }
 
-    // Agregar mensaje actual del usuario
-    // Si el último mensaje del historial era del user, fusionarlo
+    // Agregar mensaje actual
     if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
       messages[messages.length - 1].content += '\n' + Body;
     } else {
       messages.push({ role: 'user', content: Body });
     }
 
-    // VALIDACIÓN FINAL: Asegurar que tenemos al menos un mensaje del usuario
+    // VALIDACIÓN FINAL: Debe terminar con mensaje del usuario
     if (messages.length === 0 || messages[messages.length - 1].role !== 'user') {
-      console.error('❌ Error: El último mensaje no es del usuario');
+      console.error('❌ Error en construcción de mensajes');
       messages = [{ role: 'user', content: Body }];
     }
 
-    console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
+    console.log(`💬 ${messages.length} mensajes → Claude (primer: ${messages[0]?.role}, último: ${messages[messages.length - 1]?.role})`);
 
-    // Log de debugging detallado
-    if (messages.length > 0) {
-      console.log('📝 Primer mensaje:', messages[0].role, '-', messages[0].content.substring(0, 50) + '...');
-      console.log('📝 Último mensaje:', messages[messages.length - 1].role, '-', messages[messages.length - 1].content.substring(0, 50) + '...');
-    }
-
-    const systemPrompt = construirPromptConEstado(estadoActualizado);
+    const systemPrompt = construirPromptConEstado(estado);
 
     console.log('📤 Enviando a Claude con estado estructurado');
 
     let response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
-      max_tokens: 400,
+      max_tokens: 500,
       temperature: 0.7,
       system: systemPrompt,
       tools,
@@ -545,70 +401,30 @@ export default async function handler(req, res) {
       const toolUse = response.content.find(b => b.type === 'tool_use');
       if (!toolUse) break;
 
-      console.log('🔧 Herramienta llamada:', toolUse.name);
-      console.log('📥 Input:', JSON.stringify(toolUse.input, null, 2));
-      let toolResult;
-
-      if (toolUse.name === 'consultar_documentos') {
-        toolResult = await consultarDocumentos(toolUse.input);
-      } else if (toolUse.name === 'agendar_cita') {
-        toolResult = await agendarCita(toolUse.input);
-      } else if (toolUse.name === 'actualizar_estado') {
-        // Fusionar estado actual con nuevos datos de forma INCREMENTAL
-        // Solo sobrescribimos si el nuevo valor no está vacío
-        const input = toolUse.input;
-        const nuevoEstado = { ...estadoActualizado };
-
-        if (input.tipo_propiedad) nuevoEstado.tipo_propiedad = input.tipo_propiedad;
-        if (input.zona) nuevoEstado.zona = input.zona;
-        if (input.presupuesto) nuevoEstado.presupuesto = input.presupuesto;
-        if (input.etapa) nuevoEstado.etapa = input.etapa;
-        if (input.resumen) nuevoEstado.resumen = input.resumen;
-
-        nuevoEstado.telefono = telefono;
-
-        const saveResult = await guardarEstadoConversacion(nuevoEstado);
-        toolResult = { success: saveResult.success, estado_actualizado: nuevoEstado };
-
-        // Actualizamos la variable local 'estadoActualizado' para el resto del ciclo
-        Object.assign(estadoActualizado, nuevoEstado);
-      }
+      console.log('🔧 Tool:', toolUse.name);
+      let toolResult = toolUse.name === 'consultar_documentos'
+        ? await consultarDocumentos(toolUse.input)
+        : await agendarCita(toolUse.input);
 
       messages.push({ role: 'assistant', content: response.content });
       messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(toolResult) }] });
 
       response = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 400,
+        max_tokens: 500,
         temperature: 0.7,
-        system: construirPromptConEstado(estadoActualizado), // Reconstruimos el prompt con el nuevo estado por si acaso
+        system: systemPrompt,
         tools,
         messages
       });
     }
 
-    const respuestaTexto = response.content.find(b => b.type === 'text');
+    const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
 
-    if (!respuestaTexto || !respuestaTexto.text) {
-      console.error('❌ Claude no devolvió texto en la respuesta');
-      console.error('📋 Response content:', JSON.stringify(response.content, null, 2));
-      console.error('📋 Stop reason:', response.stop_reason);
-      console.error('📋 Messages enviados:', JSON.stringify(messages, null, 2));
-    }
+    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estado);
+    await guardarEstadoConversacion(nuevoEstado);
 
-    const respuestaCompleta = respuestaTexto?.text || '';
-    let respuestaLimpia = limpiarRespuesta(respuestaCompleta);
-
-    // Si la respuesta está vacía después de usar herramientas, generamos una respuesta automática
-    if (!respuestaLimpia) {
-      console.warn('⚠️ La respuesta de Claude estaba vacía. Generando respuesta de fallback.');
-      // Verificamos si se actualizó el estado recientemente para dar una respuesta coherente
-      if (estadoActualizado.tipo_propiedad || estadoActualizado.zona) {
-        respuestaLimpia = "Entendido. He actualizado tus preferencias. ¿Hay algún otro detalle que te gustaría agregar?";
-      } else {
-        respuestaLimpia = "Disculpa, déjame ayudarte mejor. ¿En qué puedo asistirte? 🏡";
-      }
-    }
+    const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
 
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const twilioMsg = await client.messages.create({
@@ -619,7 +435,7 @@ export default async function handler(req, res) {
 
     await guardarMensajeEnSheet({ telefono, direccion: 'outbound', mensaje: respuestaLimpia, messageId: twilioMsg.sid });
 
-    console.log('✅ Respuesta enviada');
+    console.log('✅ Respuesta enviada, estado guardado');
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('❌ Error:', error);
