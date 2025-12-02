@@ -408,7 +408,10 @@ export default async function handler(req, res) {
     console.log(`📚 Cargando ${historial.length} mensajes del historial`);
 
     // Construir array de mensajes en formato correcto para Claude
-    // IMPORTANTE: Claude requiere que los mensajes se alternen user-assistant-user-assistant
+    // IMPORTANTE: Claude requiere que:
+    // 1. Los mensajes se alternen user-assistant-user-assistant
+    // 2. El PRIMER mensaje SIEMPRE debe ser del usuario
+    // 3. El ÚLTIMO mensaje SIEMPRE debe ser del usuario
     let messages = [];
 
     // Agregar historial previo
@@ -430,6 +433,13 @@ export default async function handler(req, res) {
       }
     }
 
+    // VALIDACIÓN CRÍTICA: El primer mensaje DEBE ser del usuario
+    // Si el historial empieza con un mensaje del asistente, lo removemos
+    if (messages.length > 0 && messages[0].role === 'assistant') {
+      console.warn('⚠️ Removiendo mensaje inicial del asistente del historial');
+      messages.shift();
+    }
+
     // Agregar mensaje actual del usuario
     // Si el último mensaje del historial era del user, fusionarlo
     if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
@@ -438,7 +448,19 @@ export default async function handler(req, res) {
       messages.push({ role: 'user', content: Body });
     }
 
+    // VALIDACIÓN FINAL: Asegurar que tenemos al menos un mensaje del usuario
+    if (messages.length === 0 || messages[messages.length - 1].role !== 'user') {
+      console.error('❌ Error: El último mensaje no es del usuario');
+      messages = [{ role: 'user', content: Body }];
+    }
+
     console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
+
+    // Log de debugging detallado
+    if (messages.length > 0) {
+      console.log('📝 Primer mensaje:', messages[0].role, '-', messages[0].content.substring(0, 50) + '...');
+      console.log('📝 Último mensaje:', messages[messages.length - 1].role, '-', messages[messages.length - 1].content.substring(0, 50) + '...');
+    }
 
     const systemPrompt = construirPromptConEstado(estado);
 
@@ -496,7 +518,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
+    const respuestaTexto = response.content.find(b => b.type === 'text');
+
+    if (!respuestaTexto || !respuestaTexto.text) {
+      console.error('❌ Claude no devolvió texto en la respuesta');
+      console.error('📋 Response content:', JSON.stringify(response.content, null, 2));
+      console.error('📋 Stop reason:', response.stop_reason);
+      console.error('📋 Messages enviados:', JSON.stringify(messages, null, 2));
+    }
+
+    const respuestaCompleta = respuestaTexto?.text || '';
     let respuestaLimpia = limpiarRespuesta(respuestaCompleta);
 
     // Si la respuesta está vacía después de usar herramientas, generamos una respuesta automática
@@ -506,7 +537,7 @@ export default async function handler(req, res) {
       if (estado.tipo_propiedad || estado.zona) {
         respuestaLimpia = "Entendido. He actualizado tus preferencias. ¿Hay algún otro detalle que te gustaría agregar?";
       } else {
-        respuestaLimpia = "Entendido. ¿En qué más puedo ayudarte?";
+        respuestaLimpia = "Disculpa, déjame ayudarte mejor. ¿En qué puedo asistirte? 🏡";
       }
     }
 
