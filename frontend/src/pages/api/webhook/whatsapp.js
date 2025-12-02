@@ -123,55 +123,41 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  let infoConocida = [];
-  if (estado.tipo_propiedad) {
-    infoConocida.push(`- Tipo de propiedad: ${estado.tipo_propiedad}`);
-  }
-  if (estado.zona) {
-    infoConocida.push(`- Zona/Ciudad: ${estado.zona}`);
-  }
-  if (estado.presupuesto) {
-    infoConocida.push(`- Presupuesto: ${estado.presupuesto}`);
-  }
+  // Construir resumen de lo que YA sabemos
+  let resumenConocido = [];
+  if (estado.tipo_propiedad) resumenConocido.push(`Tipo: ${estado.tipo_propiedad}`);
+  if (estado.zona) resumenConocido.push(`Zona: ${estado.zona}`);
+  if (estado.presupuesto) resumenConocido.push(`Presupuesto: ${estado.presupuesto}`);
 
-  const estadoTexto = infoConocida.length > 0
-    ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**IMPORTANTE:** No vuelvas a preguntar por estos datos. Solo pregunta lo que falte para personalizar la búsqueda.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
-    : '';
+  return `Eres Claude, asesor inmobiliario profesional.
 
-  return `Eres un Asesor Inmobiliario Senior experto. Tu nombre es Claude.
+🔥 REGLA DE ORO - ANTES DE RESPONDER:
+Lee TODOS los mensajes anteriores. El cliente ya te dio información. NO la vuelvas a pedir.
 
-**CONTEXTO IMPORTANTE:**
-Tienes acceso a TODO el historial de la conversación. Lee TODOS los mensajes anteriores antes de responder.
-${estadoTexto}
+${resumenConocido.length > 0 ? `✅ YA SABES ESTO:\n${resumenConocido.join(' | ')}\n` : ''}
+📋 INFORMACIÓN QUE NECESITAS:
+1. Tipo de propiedad (casa/terreno/departamento)
+2. Zona o ciudad
+3. Presupuesto aproximado
 
-**REGLA CRÍTICA - LEE EL HISTORIAL:**
-❌ NUNCA preguntes algo que el cliente YA dijo en mensajes anteriores
-✅ SIEMPRE revisa el historial completo antes de preguntar
-✅ Si el cliente ya mencionó tipo, zona o presupuesto, NO vuelvas a preguntarlo
+⚠️ INSTRUCCIONES CRÍTICAS:
+• Si el cliente mencionó "terreno" → NO preguntes tipo de propiedad
+• Si el cliente mencionó una ciudad/zona → NO preguntes dónde
+• Si el cliente mencionó precio/presupuesto → NO preguntes presupuesto
+• Si YA tienes los 3 datos → USA la herramienta 'consultar_documentos'
 
-**EJEMPLO DE LO QUE NO DEBES HACER:**
-Cliente: "Busco terreno en Zapopan"
-Cliente: "Mi presupuesto es 2 millones"
-Tú: "¿Qué tipo de propiedad buscas?" ← ❌ ¡YA LO DIJO!
+❌ PROHIBIDO:
+"¿Qué tipo de propiedad buscas?" cuando ya dijo terreno/casa/depto
+"¿En qué zona?" cuando ya dijo la ciudad
+"¿Cuál es tu presupuesto?" cuando ya dio el precio
 
-**FLUJO CORRECTO:**
-1. LEE TODO el historial de mensajes
-2. Identifica qué información YA tienes del cliente
-3. Pregunta SOLO lo que falta
-4. Si ya tienes tipo + zona + presupuesto → usa 'consultar_documentos'
+✅ PERMITIDO:
+Preguntar SOLO lo que NO han mencionado en NINGÚN mensaje anterior
 
-**INFORMACIÓN NECESARIA:**
-- Tipo de propiedad (casa, terreno, departamento)
-- Zona/ciudad
-- Presupuesto aproximado
-
-**ESTILO:**
-- Máximo 3-4 líneas
-- 1-2 emojis
-- Profesional y cálido
-
-**GESTIÓN DE ESTADO:**
-Al final incluye: [ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
+FORMATO RESPUESTA:
+- Máximo 3 líneas
+- 1 emoji
+- Incluir al final: [ESTADO]{"tipo":"","zona":"","presupuesto":""}[/ESTADO]
 
 Zona horaria: America/Mexico_City`;
 }
@@ -194,8 +180,43 @@ function extraerEstadoDeRespuesta(respuesta, estadoActual) {
     }
   }
 
-  // Si no hay estado en la respuesta, intentar extraer del mensaje actual
   return estadoActual;
+}
+
+// Función auxiliar para detectar información del mensaje del usuario
+function detectarInformacionDelMensaje(mensaje, estadoActual) {
+  const mensajeLower = mensaje.toLowerCase();
+  let nuevoEstado = { ...estadoActual };
+  
+  // Detectar tipo de propiedad
+  if (!nuevoEstado.tipo_propiedad) {
+    if (mensajeLower.includes('terreno')) nuevoEstado.tipo_propiedad = 'terreno';
+    else if (mensajeLower.includes('casa')) nuevoEstado.tipo_propiedad = 'casa';
+    else if (mensajeLower.includes('departamento') || mensajeLower.includes('depto')) nuevoEstado.tipo_propiedad = 'departamento';
+  }
+  
+  // Detectar zona (ciudades conocidas de Jalisco)
+  if (!nuevoEstado.zona) {
+    if (mensajeLower.includes('zapopan')) nuevoEstado.zona = 'Zapopan';
+    else if (mensajeLower.includes('guadalajara')) nuevoEstado.zona = 'Guadalajara';
+    else if (mensajeLower.includes('tlaquepaque')) nuevoEstado.zona = 'Tlaquepaque';
+    else if (mensajeLower.includes('tonalá')) nuevoEstado.zona = 'Tonalá';
+    else if (mensajeLower.includes('tlajomulco')) nuevoEstado.zona = 'Tlajomulco';
+  }
+  
+  // Detectar presupuesto
+  if (!nuevoEstado.presupuesto) {
+    const matchMillon = mensajeLower.match(/(\d+)\s*mill/);
+    const matchPesos = mensajeLower.match(/(\d{1,3}(?:,\d{3})*)/);
+    
+    if (matchMillon) {
+      nuevoEstado.presupuesto = `${matchMillon[1]} millones`;
+    } else if (matchPesos && mensajeLower.includes('pesos')) {
+      nuevoEstado.presupuesto = `$${matchPesos[1]}`;
+    }
+  }
+  
+  return nuevoEstado;
 }
 
 function limpiarRespuesta(respuesta) {
@@ -343,10 +364,15 @@ export default async function handler(req, res) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const estado = await obtenerEstadoConversacion(telefono);
+    
+    // IMPORTANTE: Detectar información del mensaje ACTUAL antes de enviar a Claude
+    const estadoActualizado = detectarInformacionDelMensaje(Body, estado);
+    
     console.log('📋 Estado actual:', JSON.stringify(estado));
-    console.log('📋 Tipo:', estado.tipo_propiedad || 'NO DEFINIDO');
-    console.log('📋 Zona:', estado.zona || 'NO DEFINIDO');
-    console.log('📋 Presupuesto:', estado.presupuesto || 'NO DEFINIDO');
+    console.log('🔍 Estado detectado del mensaje:', JSON.stringify(estadoActualizado));
+    console.log('📋 Tipo:', estadoActualizado.tipo_propiedad || 'NO DEFINIDO');
+    console.log('📋 Zona:', estadoActualizado.zona || 'NO DEFINIDO');
+    console.log('📋 Presupuesto:', estadoActualizado.presupuesto || 'NO DEFINIDO');
 
     const historial = await obtenerHistorialConversacion(telefono, 10);
     console.log(`📚 Historial: ${historial.length} mensajes cargados`);
@@ -404,7 +430,7 @@ export default async function handler(req, res) {
 
     console.log(`💬 ${messages.length} mensajes → Claude (primer: ${messages[0]?.role}, último: ${messages[messages.length - 1]?.role})`);
 
-    const systemPrompt = construirPromptConEstado(estado);
+    const systemPrompt = construirPromptConEstado(estadoActualizado);
 
     console.log('📤 Enviando a Claude con estado estructurado');
 
@@ -441,7 +467,7 @@ export default async function handler(req, res) {
 
     const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
 
-    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estado);
+    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estadoActualizado);
     await guardarEstadoConversacion(nuevoEstado);
 
     const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
