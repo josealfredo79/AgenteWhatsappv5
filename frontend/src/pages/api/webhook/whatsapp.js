@@ -533,7 +533,7 @@ export default async function handler(req, res) {
     console.log('📤 Enviando a Claude con estado estructurado');
 
     let response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 400,
       temperature: 0.7,
       system: systemPrompt,
@@ -578,7 +578,7 @@ export default async function handler(req, res) {
       messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(toolResult) }] });
 
       response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 400,
         temperature: 0.7,
         system: construirPromptConEstado(estadoActualizado), // Reconstruimos el prompt con el nuevo estado por si acaso
