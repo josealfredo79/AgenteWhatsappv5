@@ -447,6 +447,14 @@ export default async function handler(req, res) {
     console.log('📋 Tipo:', estadoActualizado.tipo_propiedad || 'NO DEFINIDO');
     console.log('📋 Zona:', estadoActualizado.zona || 'NO DEFINIDO');
     console.log('📋 Presupuesto:', estadoActualizado.presupuesto || 'NO DEFINIDO');
+    
+    // CRÍTICO: Guardar estado INMEDIATAMENTE si detectamos información nueva
+    if (estadoActualizado.tipo_propiedad !== estado.tipo_propiedad ||
+        estadoActualizado.zona !== estado.zona ||
+        estadoActualizado.presupuesto !== estado.presupuesto) {
+      console.log('💾 Guardando estado actualizado ANTES de enviar a Claude...');
+      await guardarEstadoConversacion(estadoActualizado);
+    }
 
     const historial = await obtenerHistorialConversacion(telefono, 10);
     console.log(`📚 Historial: ${historial.length} mensajes cargados`);
