@@ -138,16 +138,16 @@ function construirPromptConEstado(estado) {
     ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**IMPORTANTE:** No vuelvas a preguntar por estos datos. Solo pregunta lo que falte para personalizar la búsqueda.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
     : '';
 
-  return `Eres un asesor inmobiliario profesional que sigue un FLUJO CONVERSACIONAL estructurado.
+  return `Eres un asesor inmobiliario profesional que mantiene conversaciones contextuales y naturales.
 ${estadoTexto}
 
 **🎯 TU MISIÓN:**
-Guiar al cliente paso a paso hacia encontrar su propiedad ideal o agendar una cita.
+Guiar al cliente paso a paso hacia encontrar su propiedad ideal o agendar una cita, manteniendo el contexto de toda la conversación.
 
 **📋 FLUJO CONVERSACIONAL (Sigue estos pasos en orden):**
 
 🔹 **PASO 1 - SALUDO INICIAL:**
-   - Si el cliente saluda por primera vez, responde cálidamente
+   - Si es el primer mensaje del cliente, responde cálidamente
    - Pregunta: "¿Buscas comprar, rentar o invertir en alguna propiedad?"
    - Máximo 2 líneas
 
@@ -175,24 +175,26 @@ Guiar al cliente paso a paso hacia encontrar su propiedad ideal o agendar una ci
 
 **⚠️ REGLAS ESTRICTAS:**
 
-❌ NUNCA te presentes de nuevo si ya hay conversación previa
 ❌ NUNCA preguntes datos que ya tienes (revisa INFORMACIÓN YA RECOPILADA)
 ❌ NUNCA envíes toda la información de una vez
 ❌ NUNCA uses herramientas sin que el cliente haya dado los datos necesarios
 ❌ NUNCA des más de 2-3 opciones por mensaje
-❌ NUNCA reinicies la conversación si el cliente dice "no" u otra respuesta corta
+❌ NUNCA reinicies la conversación - MANTÉN siempre el contexto de mensajes anteriores
+❌ Si el cliente responde "no", "si", "ok" u otra palabra corta, NO asumas que es nuevo - dale continuidad a lo anterior
 
+✅ SIEMPRE mantén el contexto de los mensajes previos en la conversación
 ✅ SIEMPRE pregunta antes de dar información
 ✅ SIEMPRE máximo 3-4 líneas por mensaje (excepto al presentar propiedades)
 ✅ SIEMPRE termina con una pregunta para continuar el flujo
 ✅ SIEMPRE usa la herramienta 'actualizar_estado' cuando detectes datos nuevos
-✅ Si el cliente da una respuesta ambigua ("no", "ok"), pide clarificación sin resetear
+✅ Si el cliente da una respuesta ambigua, pide clarificación sin resetear - mantén el hilo conversacional
 
 **🎨 ESTILO:**
 - Profesional pero cercano
 - Usa 1-2 emojis por mensaje (🏡 ✨ 📍 💰 🏠)
 - Respuestas cortas y directas
 - Siempre termina con pregunta
+- Natural y conversacional - como si fuera WhatsApp real
 
 **🔧 GESTIÓN DE ESTADO:**
 Cuando el cliente mencione tipo de propiedad, zona o presupuesto, llama INMEDIATAMENTE a 'actualizar_estado'.
@@ -397,12 +399,46 @@ export default async function handler(req, res) {
     const estado = await obtenerEstadoConversacion(telefono);
     console.log('📋 Estado actual:', JSON.stringify(estado));
 
-    // CAMBIO CRÍTICO: Como v1, NO cargamos historial
-    // El estado persistente + prompt estructurado es suficiente
-    // Esto evita confusión del modelo con contexto antiguo
+    // ✅ CORRECCIÓN CRÍTICA: Claude API es STATELESS
+    // Debemos enviar el historial completo en cada request
+    // Fuente: https://docs.anthropic.com/en/api-reference/messages/
 
-    let messages = [{ role: 'user', content: Body }];
+    // Cargar últimos 10 mensajes de conversación (5 turnos user-assistant)
+    const historial = await obtenerHistorialConversacion(telefono, 10);
+    console.log(`📚 Cargando ${historial.length} mensajes del historial`);
 
+    // Construir array de mensajes en formato correcto para Claude
+    // IMPORTANTE: Claude requiere que los mensajes se alternen user-assistant-user-assistant
+    let messages = [];
+
+    // Agregar historial previo
+    for (const msg of historial) {
+      const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
+      const lastRole = messages.length > 0 ? messages[messages.length - 1].role : null;
+
+      // Solo agregar si no hay dos mensajes consecutivos del mismo rol
+      if (role !== lastRole) {
+        messages.push({
+          role,
+          content: msg.mensaje
+        });
+      } else {
+        // Si hay dos mensajes consecutivos del mismo rol, fusionarlos
+        if (messages.length > 0) {
+          messages[messages.length - 1].content += '\n' + msg.mensaje;
+        }
+      }
+    }
+
+    // Agregar mensaje actual del usuario
+    // Si el último mensaje del historial era del user, fusionarlo
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      messages[messages.length - 1].content += '\n' + Body;
+    } else {
+      messages.push({ role: 'user', content: Body });
+    }
+
+    console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
 
     const systemPrompt = construirPromptConEstado(estado);
 
