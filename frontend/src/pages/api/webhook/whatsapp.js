@@ -176,12 +176,7 @@ Tú: "¿Qué tipo buscas?" ← ❌ YA LO TIENES, USA LA HERRAMIENTA
 Cliente: "terreno en Zapopan de 2 millones"  
 [Tienes: ✅tipo ✅zona ✅presupuesto]
 Tú: [USAS consultar_documentos con query="terrenos Zapopan 2 millones"]
-Tú: "Encontré estas opciones: 🏡 Terreno 250m²..."
-═══════════════════════════════════════════════`;
-
-Cliente: "Busco terreno en Zapopan"  
-Tú: "Perfecto, ¿qué presupuesto manejas aproximadamente? 💰"
-═══════════════════════════════════════════════`;
+Tú: "Encontré estas opciones: 🏡 Terreno 250m²..."`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
