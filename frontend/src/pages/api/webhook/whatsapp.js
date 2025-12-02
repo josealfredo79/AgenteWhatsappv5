@@ -349,6 +349,67 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
   }
 }
 
+// ✨ DETECCIÓN AUTOMÁTICA DE DATOS - Antes de enviar a Claude
+async function detectarYActualizarEstado(mensaje, telefono, estadoActual) {
+  let cambios = {};
+  const mensajeLower = mensaje.toLowerCase();
+
+  // Detectar tipo de propiedad
+  if (!estadoActual.tipo_propiedad || estadoActual.tipo_propiedad === '') {
+    if (mensajeLower.includes('terreno')) {
+      cambios.tipo_propiedad = 'Terreno';
+    } else if (mensajeLower.match(/\bcasa\b/)) {
+      cambios.tipo_propiedad = 'Casa';
+    } else if (mensajeLower.match(/\bdepartamento\b|\bdepto\b/)) {
+      cambios.tipo_propiedad = 'Departamento';
+    } else if (mensajeLower.includes('local')) {
+      cambios.tipo_propiedad = 'Local comercial';
+    }
+  }
+
+  // Detectar zona
+  if (!estadoActual.zona || estadoActual.zona === '') {
+    if (mensajeLower.includes('zapopan')) {
+      cambios.zona = 'Zapopan, Jalisco';
+    } else if (mensajeLower.includes('guadalajara')) {
+      cambios.zona = 'Guadalajara, Jalisco';
+    } else if (mensajeLower.match(/\bcentro\b/)) {
+      cambios.zona = 'Centro';
+    } else if (mensajeLower.match(/\bnorte\b/)) {
+      cambios.zona = 'Norte';
+    } else if (mensajeLower.match(/\bsur\b/)) {
+      cambios.zona = 'Sur';
+    }
+  }
+
+  // Detectar presupuesto
+  if (!estadoActual.presupuesto || estadoActual.presupuesto === '') {
+    const presupuestoMatch = mensajeLower.match(/(\d+)\s*(millon|millones)/i);
+    if (presupuestoMatch) {
+      cambios.presupuesto = `${presupuestoMatch[1]} millones de pesos`;
+    } else if (mensajeLower.match(/\d{3,}/)) {
+      const numero = mensajeLower.match(/\d{3,}/)[0];
+      cambios.presupuesto = `${numero} pesos`;
+    }
+  }
+
+  // Si hay cambios, actualizar el estado
+  if (Object.keys(cambios).length > 0) {
+    const nuevoEstado = {
+      ...estadoActual,
+      ...cambios,
+      telefono,
+      etapa: 'busqueda'
+    };
+
+    console.log('🔍 DETECCIÓN AUTOMÁTICA:', cambios);
+    await guardarEstadoConversacion(nuevoEstado);
+    return nuevoEstado;
+  }
+
+  return estadoActual;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -398,7 +459,11 @@ export default async function handler(req, res) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const estado = await obtenerEstadoConversacion(telefono);
-    console.log('📋 Estado actual:', JSON.stringify(estado));
+    console.log('📋 Estado actual (antes):', JSON.stringify(estado));
+
+    //🔍 DETECCIÓN AUTOMÁTICA EN CÓDIGO (no esperar a que Claude use herramientas)
+    const estadoActualizado = await detectarYActualizarEstado(Body, telefono, estado);
+    console.log('📋 Estado actualizado (después):', JSON.stringify(estadoActualizado));
 
     // ✅ CORRECCIÓN CRÍTICA: Claude API es STATELESS
     // Debemos enviar el historial completo en cada request
@@ -463,7 +528,7 @@ export default async function handler(req, res) {
       console.log('📝 Último mensaje:', messages[messages.length - 1].role, '-', messages[messages.length - 1].content.substring(0, 50) + '...');
     }
 
-    const systemPrompt = construirPromptConEstado(estado);
+    const systemPrompt = construirPromptConEstado(estadoActualizado);
 
     console.log('📤 Enviando a Claude con estado estructurado');
 
@@ -492,7 +557,7 @@ export default async function handler(req, res) {
         // Fusionar estado actual con nuevos datos de forma INCREMENTAL
         // Solo sobrescribimos si el nuevo valor no está vacío
         const input = toolUse.input;
-        const nuevoEstado = { ...estado };
+        const nuevoEstado = { ...estadoActualizado };
 
         if (input.tipo_propiedad) nuevoEstado.tipo_propiedad = input.tipo_propiedad;
         if (input.zona) nuevoEstado.zona = input.zona;
@@ -505,8 +570,8 @@ export default async function handler(req, res) {
         const saveResult = await guardarEstadoConversacion(nuevoEstado);
         toolResult = { success: saveResult.success, estado_actualizado: nuevoEstado };
 
-        // Actualizamos la variable local 'estado' para el resto del ciclo
-        Object.assign(estado, nuevoEstado);
+        // Actualizamos la variable local 'estadoActualizado' para el resto del ciclo
+        Object.assign(estadoActualizado, nuevoEstado);
       }
 
       messages.push({ role: 'assistant', content: response.content });
@@ -516,7 +581,7 @@ export default async function handler(req, res) {
         model: 'claude-haiku-4-5',
         max_tokens: 400,
         temperature: 0.7,
-        system: construirPromptConEstado(estado), // Reconstruimos el prompt con el nuevo estado por si acaso
+        system: construirPromptConEstado(estadoActualizado), // Reconstruimos el prompt con el nuevo estado por si acaso
         tools,
         messages
       });
@@ -538,7 +603,7 @@ export default async function handler(req, res) {
     if (!respuestaLimpia) {
       console.warn('⚠️ La respuesta de Claude estaba vacía. Generando respuesta de fallback.');
       // Verificamos si se actualizó el estado recientemente para dar una respuesta coherente
-      if (estado.tipo_propiedad || estado.zona) {
+      if (estadoActualizado.tipo_propiedad || estadoActualizado.zona) {
         respuestaLimpia = "Entendido. He actualizado tus preferencias. ¿Hay algún otro detalle que te gustaría agregar?";
       } else {
         respuestaLimpia = "Disculpa, déjame ayudarte mejor. ¿En qué puedo asistirte? 🏡";
