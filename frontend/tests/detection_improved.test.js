@@ -14,61 +14,84 @@ function detectarInformacionDelMensaje(mensaje, estadoActual) {
   const mensajeLower = mensaje.toLowerCase();
   let nuevoEstado = { ...estadoActual };
   
+  // Detectar si el usuario está CAMBIANDO información (palabras clave)
+  const esCambio = mensajeLower.match(/\b(mejor|ahora|cambio|cambi[oó]|prefiero|en realidad|corrección|correcci[oó]n|no\s*,?\s*(quiero|busco|prefiero)|en vez de|instead)\b/);
+  
   // Detectar tipo de propiedad (más variaciones)
-  if (!nuevoEstado.tipo_propiedad) {
-    if (mensajeLower.match(/\b(terreno|lote|predio)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'terreno';
-    } else if (mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'casa';
-    } else if (mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'departamento';
+  const tipoDetectado = 
+    mensajeLower.match(/\b(terreno|lote|predio)s?\b/) ? 'terreno' :
+    mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/) ? 'casa' :
+    mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/) ? 'departamento' :
+    null;
+  
+  // Solo actualizar si: NO tiene valor previo O está cambiando explícitamente
+  if (tipoDetectado) {
+    if (!nuevoEstado.tipo_propiedad) {
+      nuevoEstado.tipo_propiedad = tipoDetectado;
+    } else if (esCambio) {
+      nuevoEstado.tipo_propiedad = tipoDetectado;
     }
   }
   
   // Detectar zona (ciudades conocidas de Jalisco) - más flexible
-  if (!nuevoEstado.zona) {
-    const zonas = [
-      { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
-      { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
-      { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
-      { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
-      { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
-      { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
-    ];
-    
-    for (const zona of zonas) {
-      if (zona.pattern.test(mensajeLower)) {
-        nuevoEstado.zona = zona.nombre;
-        break;
-      }
+  const zonas = [
+    { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
+    { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
+    { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
+    { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
+    { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
+    { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
+  ];
+  
+  let zonaDetectada = null;
+  for (const zona of zonas) {
+    if (zona.pattern.test(mensajeLower)) {
+      zonaDetectada = zona.nombre;
+      break;
+    }
+  }
+  
+  if (zonaDetectada) {
+    if (!nuevoEstado.zona) {
+      nuevoEstado.zona = zonaDetectada;
+    } else if (esCambio) {
+      nuevoEstado.zona = zonaDetectada;
     }
   }
   
   // Detectar presupuesto (más formatos)
-  if (!nuevoEstado.presupuesto) {
-    // Formato: "2 millones", "3.5 millones", "medio millón"
-    const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
-    if (matchMillon) {
-      nuevoEstado.presupuesto = `${matchMillon[1]} millones`;
-    }
-    
-    // Formato: "500 mil", "800k"
-    const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
-    if (matchMil && !nuevoEstado.presupuesto) {
-      nuevoEstado.presupuesto = `${matchMil[1]} mil pesos`;
-    }
-    
-    // Formato: "$450,000", "450000 pesos"
-    const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
-    if (matchNumero && !nuevoEstado.presupuesto) {
-      nuevoEstado.presupuesto = `$${matchNumero[1]}`;
-    }
-    
-    // Formato: "medio millón", "un millón"
-    if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
-      nuevoEstado.presupuesto = '0.5 millones';
-    } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
-      nuevoEstado.presupuesto = '1 millón';
+  let presupuestoDetectado = null;
+  
+  // Formato: "2 millones", "3.5 millones", "medio millón"
+  const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
+  if (matchMillon) {
+    presupuestoDetectado = `${matchMillon[1]} millones`;
+  }
+  
+  // Formato: "500 mil", "800k"
+  const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
+  if (matchMil && !presupuestoDetectado) {
+    presupuestoDetectado = `${matchMil[1]} mil pesos`;
+  }
+  
+  // Formato: "$450,000", "450000 pesos"
+  const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
+  if (matchNumero && !presupuestoDetectado) {
+    presupuestoDetectado = `$${matchNumero[1]}`;
+  }
+  
+  // Formato: "medio millón", "un millón"
+  if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
+    presupuestoDetectado = '0.5 millones';
+  } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
+    presupuestoDetectado = '1 millón';
+  }
+  
+  if (presupuestoDetectado) {
+    if (!nuevoEstado.presupuesto) {
+      nuevoEstado.presupuesto = presupuestoDetectado;
+    } else if (esCambio) {
+      nuevoEstado.presupuesto = presupuestoDetectado;
     }
   }
   
@@ -203,6 +226,47 @@ describe('🔍 Detección Mejorada de Información', () => {
     expect(resultado.tipo_propiedad).toBe('casa');
     expect(resultado.zona).toBe('Guadalajara');
     expect(resultado.presupuesto).toBe('1 millón');
+  });
+
+  test('✅ Permite cambiar información con palabras clave', () => {
+    const estadoInicial = {
+      tipo_propiedad: 'terreno',
+      zona: 'Zapopan',
+      presupuesto: '2 millones'
+    };
+    
+    const mensaje = 'Mejor quiero una casa en Guadalajara de 3 millones';
+    const resultado = detectarInformacionDelMensaje(mensaje, estadoInicial);
+    
+    // Debe actualizar porque tiene "mejor"
+    expect(resultado.tipo_propiedad).toBe('casa');
+    expect(resultado.zona).toBe('Guadalajara');
+    expect(resultado.presupuesto).toBe('3 millones');
+  });
+
+  test('✅ Permite corrección: "No, prefiero..."', () => {
+    const estadoInicial = {
+      tipo_propiedad: 'terreno',
+      zona: 'Zapopan'
+    };
+    
+    const mensaje = 'No, prefiero casa en Tlaquepaque';
+    const resultado = detectarInformacionDelMensaje(mensaje, estadoInicial);
+    
+    expect(resultado.tipo_propiedad).toBe('casa');
+    expect(resultado.zona).toBe('Tlaquepaque');
+  });
+
+  test('✅ Detecta cambio cuando menciona tipo diferente sin palabra clave', () => {
+    const estadoInicial = {
+      tipo_propiedad: 'terreno'
+    };
+    
+    const mensaje = 'Ahora busco departamento';
+    const resultado = detectarInformacionDelMensaje(mensaje, estadoInicial);
+    
+    // Debe cambiar porque "ahora" indica cambio
+    expect(resultado.tipo_propiedad).toBe('departamento');
   });
 
 });

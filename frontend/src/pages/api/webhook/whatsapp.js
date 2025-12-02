@@ -146,19 +146,22 @@ ${infoFaltante.length > 0 ? infoFaltante.join('\n') : '(¡Ya tienes todo!)'}
 
 🎯 INSTRUCCIONES CRÍTICAS:
 
-1. **NUNCA vuelvas a preguntar información que YA TIENES** (marcada con ✅ arriba)
+1. **NUNCA vuelvas a preguntar información marcada con ✅**
+   (EXCEPTO si el cliente dice "cambio de opinión" o "prefiero otro")
    
-2. **Si ya tienes los 3 datos** (tipo, zona, presupuesto):
-   → Usa INMEDIATAMENTE la herramienta 'consultar_documentos'
-   → NO sigas haciendo preguntas
+2. **Si ya tienes los 3 datos** → Usa INMEDIATAMENTE la herramienta 'consultar_documentos'
    
 3. **Si te falta información** (marcada con ❌):
    → Pregunta SOLO lo que falta
    → Una pregunta a la vez
-   
-4. **Respuestas cortas**: Máximo 3 líneas de texto
 
-5. **Al final de tu respuesta**, incluye:
+4. **Si el cliente CAMBIA información:**
+   → "Mejor quiero casa" (tenías terreno) → Actualiza y busca casas
+   → "No, en Guadalajara" (tenías Zapopan) → Actualiza zona
+   
+5. **Respuestas cortas**: Máximo 3 líneas de texto
+
+6. **Al final de tu respuesta**, incluye:
    [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]
 
 ═══════════════════════════════════════════════
@@ -200,61 +203,90 @@ function detectarInformacionDelMensaje(mensaje, estadoActual) {
   const mensajeLower = mensaje.toLowerCase();
   let nuevoEstado = { ...estadoActual };
   
+  // Detectar si el usuario está CAMBIANDO información (palabras clave)
+  const esCambio = mensajeLower.match(/\b(mejor|ahora|cambio|cambi[oó]|prefiero|en realidad|corrección|correcci[oó]n|no\s*,?\s*(quiero|busco|prefiero)|en vez de|instead)\b/);
+  
   // Detectar tipo de propiedad (más variaciones)
-  if (!nuevoEstado.tipo_propiedad) {
-    if (mensajeLower.match(/\b(terreno|lote|predio)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'terreno';
-    } else if (mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'casa';
-    } else if (mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/)) {
-      nuevoEstado.tipo_propiedad = 'departamento';
+  const tipoDetectado = 
+    mensajeLower.match(/\b(terreno|lote|predio)s?\b/) ? 'terreno' :
+    mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/) ? 'casa' :
+    mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/) ? 'departamento' :
+    null;
+  
+  // Solo actualizar si: NO tiene valor previo O está cambiando explícitamente
+  if (tipoDetectado) {
+    if (!nuevoEstado.tipo_propiedad) {
+      // No tenía valor, asignar
+      nuevoEstado.tipo_propiedad = tipoDetectado;
+    } else if (esCambio) {
+      // Tiene valor PERO usuario dice "mejor", "ahora", "prefiero", etc.
+      console.log(`🔄 Usuario cambió tipo: ${nuevoEstado.tipo_propiedad} → ${tipoDetectado}`);
+      nuevoEstado.tipo_propiedad = tipoDetectado;
     }
+    // Si ya tiene valor y NO hay palabra de cambio, mantener el original
   }
   
   // Detectar zona (ciudades conocidas de Jalisco) - más flexible
-  if (!nuevoEstado.zona) {
-    const zonas = [
-      { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
-      { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
-      { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
-      { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
-      { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
-      { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
-    ];
-    
-    for (const zona of zonas) {
-      if (zona.pattern.test(mensajeLower)) {
-        nuevoEstado.zona = zona.nombre;
-        break;
-      }
+  const zonas = [
+    { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
+    { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
+    { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
+    { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
+    { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
+    { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
+  ];
+  
+  let zonaDetectada = null;
+  for (const zona of zonas) {
+    if (zona.pattern.test(mensajeLower)) {
+      zonaDetectada = zona.nombre;
+      break;
+    }
+  }
+  
+  if (zonaDetectada) {
+    if (!nuevoEstado.zona) {
+      nuevoEstado.zona = zonaDetectada;
+    } else if (esCambio) {
+      console.log(`🔄 Usuario cambió zona: ${nuevoEstado.zona} → ${zonaDetectada}`);
+      nuevoEstado.zona = zonaDetectada;
     }
   }
   
   // Detectar presupuesto (más formatos)
-  if (!nuevoEstado.presupuesto) {
-    // Formato: "2 millones", "3.5 millones", "medio millón"
-    const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
-    if (matchMillon) {
-      nuevoEstado.presupuesto = `${matchMillon[1]} millones`;
-    }
-    
-    // Formato: "500 mil", "800k"
-    const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
-    if (matchMil && !nuevoEstado.presupuesto) {
-      nuevoEstado.presupuesto = `${matchMil[1]} mil pesos`;
-    }
-    
-    // Formato: "$450,000", "450000 pesos"
-    const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
-    if (matchNumero && !nuevoEstado.presupuesto) {
-      nuevoEstado.presupuesto = `$${matchNumero[1]}`;
-    }
-    
-    // Formato: "medio millón", "un millón"
-    if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
-      nuevoEstado.presupuesto = '0.5 millones';
-    } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
-      nuevoEstado.presupuesto = '1 millón';
+  let presupuestoDetectado = null;
+  
+  // Formato: "2 millones", "3.5 millones", "medio millón"
+  const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
+  if (matchMillon) {
+    presupuestoDetectado = `${matchMillon[1]} millones`;
+  }
+  
+  // Formato: "500 mil", "800k"
+  const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
+  if (matchMil && !presupuestoDetectado) {
+    presupuestoDetectado = `${matchMil[1]} mil pesos`;
+  }
+  
+  // Formato: "$450,000", "450000 pesos"
+  const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
+  if (matchNumero && !presupuestoDetectado) {
+    presupuestoDetectado = `$${matchNumero[1]}`;
+  }
+  
+  // Formato: "medio millón", "un millón"
+  if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
+    presupuestoDetectado = '0.5 millones';
+  } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
+    presupuestoDetectado = '1 millón';
+  }
+  
+  if (presupuestoDetectado) {
+    if (!nuevoEstado.presupuesto) {
+      nuevoEstado.presupuesto = presupuestoDetectado;
+    } else if (esCambio) {
+      console.log(`🔄 Usuario cambió presupuesto: ${nuevoEstado.presupuesto} → ${presupuestoDetectado}`);
+      nuevoEstado.presupuesto = presupuestoDetectado;
     }
   }
   
