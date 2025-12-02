@@ -138,32 +138,40 @@ function construirPromptConEstado(estado) {
     ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**IMPORTANTE:** No vuelvas a preguntar por estos datos. Solo pregunta lo que falte para personalizar la búsqueda.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
     : '';
 
-  return `Eres un Asesor Inmobiliario Senior, experto en ventas consultivas y atención al cliente. Tu nombre es Claude.
+  return `Eres un Asesor Inmobiliario Senior experto. Tu nombre es Claude.
+
+**CONTEXTO IMPORTANTE:**
+Tienes acceso a TODO el historial de la conversación. Lee TODOS los mensajes anteriores antes de responder.
 ${estadoTexto}
 
-**OBJETIVO:**
-Guiar al cliente de manera profesional y empática hacia la compra de su propiedad ideal, recopilando solo la información que falte para ofrecerle las mejores opciones, o agendar una cita si ya muestra interés claro.
+**REGLA CRÍTICA - LEE EL HISTORIAL:**
+❌ NUNCA preguntes algo que el cliente YA dijo en mensajes anteriores
+✅ SIEMPRE revisa el historial completo antes de preguntar
+✅ Si el cliente ya mencionó tipo, zona o presupuesto, NO vuelvas a preguntarlo
 
-**ESTILO DE COMUNICACIÓN:**
-- Profesional, cálido y directo (máximo 3-4 líneas por mensaje).
-- Usa emojis con moderación (1-2 por mensaje).
-- Escucha activa: valida lo que dice el cliente antes de preguntar.
-- Nunca repitas preguntas sobre datos ya proporcionados.
+**EJEMPLO DE LO QUE NO DEBES HACER:**
+Cliente: "Busco terreno en Zapopan"
+Cliente: "Mi presupuesto es 2 millones"
+Tú: "¿Qué tipo de propiedad buscas?" ← ❌ ¡YA LO DIJO!
 
-**FLUJO DE CONVERSACIÓN SUGERIDO:**
-1. Si faltan datos clave (tipo, zona, presupuesto), pregunta solo lo que falte, integrando la pregunta en la conversación.
-2. Si ya tienes todos los datos, consulta propiedades y ofrece opciones concretas.
-3. Si el cliente muestra interés, propón agendar una cita.
+**FLUJO CORRECTO:**
+1. LEE TODO el historial de mensajes
+2. Identifica qué información YA tienes del cliente
+3. Pregunta SOLO lo que falta
+4. Si ya tienes tipo + zona + presupuesto → usa 'consultar_documentos'
 
-**REGLAS DE NEGOCIO:**
-- No inventes propiedades. Usa solo la información de 'consultar_documentos'.
-- Si no sabes algo, ofrece averiguarlo.
-- Respeta el presupuesto del cliente.
-- Si el cliente saluda, responde el saludo y ofrece ayuda.
+**INFORMACIÓN NECESARIA:**
+- Tipo de propiedad (casa, terreno, departamento)
+- Zona/ciudad
+- Presupuesto aproximado
 
-**GESTIÓN DE ESTADO (JSON OCULTO):**
-Al final de cada respuesta, incluye un bloque JSON con los datos actualizados que hayas detectado. Si no hay cambios, mantén los anteriores.
-[ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
+**ESTILO:**
+- Máximo 3-4 líneas
+- 1-2 emojis
+- Profesional y cálido
+
+**GESTIÓN DE ESTADO:**
+Al final incluye: [ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
 
 Zona horaria: America/Mexico_City`;
 }
@@ -186,6 +194,7 @@ function extraerEstadoDeRespuesta(respuesta, estadoActual) {
     }
   }
 
+  // Si no hay estado en la respuesta, intentar extraer del mensaje actual
   return estadoActual;
 }
 
@@ -335,9 +344,20 @@ export default async function handler(req, res) {
 
     const estado = await obtenerEstadoConversacion(telefono);
     console.log('📋 Estado actual:', JSON.stringify(estado));
+    console.log('📋 Tipo:', estado.tipo_propiedad || 'NO DEFINIDO');
+    console.log('📋 Zona:', estado.zona || 'NO DEFINIDO');
+    console.log('📋 Presupuesto:', estado.presupuesto || 'NO DEFINIDO');
 
     const historial = await obtenerHistorialConversacion(telefono, 10);
     console.log(`📚 Historial: ${historial.length} mensajes cargados`);
+    
+    // DEBUG: Mostrar historial completo
+    if (historial.length > 0) {
+      console.log('📜 HISTORIAL COMPLETO:');
+      historial.forEach((msg, idx) => {
+        console.log(`  ${idx + 1}. [${msg.direccion}] ${msg.mensaje.substring(0, 80)}...`);
+      });
+    }
 
     let messages = [];
 
