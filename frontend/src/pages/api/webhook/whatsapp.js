@@ -123,43 +123,21 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  // Construir resumen de lo que YA sabemos
-  let resumenConocido = [];
-  if (estado.tipo_propiedad) resumenConocido.push(`Tipo: ${estado.tipo_propiedad}`);
-  if (estado.zona) resumenConocido.push(`Zona: ${estado.zona}`);
-  if (estado.presupuesto) resumenConocido.push(`Presupuesto: ${estado.presupuesto}`);
+  return `Eres Claude, asesor inmobiliario.
 
-  return `Eres Claude, asesor inmobiliario profesional.
+INFORMACIÓN QUE NECESITAS DEL CLIENTE:
+1. Tipo (casa/terreno/departamento)
+2. Zona o ciudad  
+3. Presupuesto
 
-🔥 REGLA DE ORO - ANTES DE RESPONDER:
-Lee TODOS los mensajes anteriores. El cliente ya te dio información. NO la vuelvas a pedir.
+REGLA CRÍTICA:
+Si el cliente YA mencionó algún dato en sus mensajes anteriores, NO vuelvas a preguntarlo.
+Lee TODO el historial antes de responder.
 
-${resumenConocido.length > 0 ? `✅ YA SABES ESTO:\n${resumenConocido.join(' | ')}\n` : ''}
-📋 INFORMACIÓN QUE NECESITAS:
-1. Tipo de propiedad (casa/terreno/departamento)
-2. Zona o ciudad
-3. Presupuesto aproximado
+Si ya tienes los 3 datos → usa 'consultar_documentos'
 
-⚠️ INSTRUCCIONES CRÍTICAS:
-• Si el cliente mencionó "terreno" → NO preguntes tipo de propiedad
-• Si el cliente mencionó una ciudad/zona → NO preguntes dónde
-• Si el cliente mencionó precio/presupuesto → NO preguntes presupuesto
-• Si YA tienes los 3 datos → USA la herramienta 'consultar_documentos'
-
-❌ PROHIBIDO:
-"¿Qué tipo de propiedad buscas?" cuando ya dijo terreno/casa/depto
-"¿En qué zona?" cuando ya dijo la ciudad
-"¿Cuál es tu presupuesto?" cuando ya dio el precio
-
-✅ PERMITIDO:
-Preguntar SOLO lo que NO han mencionado en NINGÚN mensaje anterior
-
-FORMATO RESPUESTA:
-- Máximo 3 líneas
-- 1 emoji
-- Incluir al final: [ESTADO]{"tipo":"","zona":"","presupuesto":""}[/ESTADO]
-
-Zona horaria: America/Mexico_City`;
+Responde en máximo 3 líneas. Incluye al final:
+[ESTADO]{"tipo":"","zona":"","presupuesto":""}[/ESTADO]`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
@@ -415,11 +393,23 @@ export default async function handler(req, res) {
       messages.shift();
     }
 
-    // Agregar mensaje actual
+    // Agregar mensaje actual CON CONTEXTO
+    let mensajeConContexto = Body;
+    
+    // Agregar resumen de lo que ya sabemos al mensaje
+    if (estadoActualizado.tipo_propiedad || estadoActualizado.zona || estadoActualizado.presupuesto) {
+      let resumen = '\n\n[CONTEXTO: ';
+      if (estadoActualizado.tipo_propiedad) resumen += `Ya dije que busco ${estadoActualizado.tipo_propiedad}. `;
+      if (estadoActualizado.zona) resumen += `Ya dije que en ${estadoActualizado.zona}. `;
+      if (estadoActualizado.presupuesto) resumen += `Ya dije presupuesto de ${estadoActualizado.presupuesto}.`;
+      resumen += ']';
+      mensajeConContexto += resumen;
+    }
+    
     if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-      messages[messages.length - 1].content += '\n' + Body;
+      messages[messages.length - 1].content += '\n' + mensajeConContexto;
     } else {
-      messages.push({ role: 'user', content: Body });
+      messages.push({ role: 'user', content: mensajeConContexto });
     }
 
     // VALIDACIÓN FINAL: Debe terminar con mensaje del usuario
