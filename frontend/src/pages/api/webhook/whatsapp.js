@@ -149,17 +149,17 @@ ${infoFaltante.length > 0 ? infoFaltante.join('\n') : '(¡Ya tienes todo!)'}
 1. **NUNCA vuelvas a preguntar información marcada con ✅**
    (EXCEPTO si el cliente dice "cambio de opinión" o "prefiero otro")
    
-2. **Si ya tienes los 3 datos** → Usa INMEDIATAMENTE la herramienta 'consultar_documentos'
+2. **Si ya tienes los 3 datos** → Usa INMEDIATAMENTE 'consultar_documentos'
+   → NO respondas con texto
+   → NO preguntes confirmaciones
+   → USA LA HERRAMIENTA DIRECTO
    
 3. **Si te falta información** (marcada con ❌):
-   → Pregunta SOLO lo que falta
-   → Una pregunta a la vez
-
-4. **Si el cliente CAMBIA información:**
-   → "Mejor quiero casa" (tenías terreno) → Actualiza y busca casas
-   → "No, en Guadalajara" (tenías Zapopan) → Actualiza zona
+   → Pregunta SOLO UNO de los datos que faltan
+   → Una pregunta corta
    
-5. **Respuestas cortas**: Máximo 3 líneas de texto
+4. **Después de usar consultar_documentos:**
+5. **Respuestas cortas**: Máximo 2 líneas de texto
 
 6. **Al final de tu respuesta**, incluye:
    [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]
@@ -167,10 +167,17 @@ ${infoFaltante.length > 0 ? infoFaltante.join('\n') : '(¡Ya tienes todo!)'}
 ═══════════════════════════════════════════════
 ❌ EJEMPLO DE LO QUE NO DEBES HACER:
 
-Cliente: "Busco terreno en Zapopan"
-Tú: "¿Qué tipo de propiedad buscas?" ← ❌ YA LO DIJO
+Cliente: "terreno en Zapopan de 2 millones"
+[Tienes: ✅tipo ✅zona ✅presupuesto]
+Tú: "¿Qué tipo buscas?" ← ❌ YA LO TIENES, USA LA HERRAMIENTA
 
 ✅ EJEMPLO CORRECTO:
+
+Cliente: "terreno en Zapopan de 2 millones"  
+[Tienes: ✅tipo ✅zona ✅presupuesto]
+Tú: [USAS consultar_documentos con query="terrenos Zapopan 2 millones"]
+Tú: "Encontré estas opciones: 🏡 Terreno 250m²..."
+═══════════════════════════════════════════════`;
 
 Cliente: "Busco terreno en Zapopan"  
 Tú: "Perfecto, ¿qué presupuesto manejas aproximadamente? 💰"
@@ -300,7 +307,7 @@ function limpiarRespuesta(respuesta) {
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Consulta propiedades disponibles. Usa cuando tengas: tipo + zona + presupuesto.',
+    description: 'DEBES usar esta herramienta INMEDIATAMENTE cuando tengas los 3 datos: tipo + zona + presupuesto. NO preguntes nada más, USA LA HERRAMIENTA.',
     input_schema: {
       type: 'object',
       properties: {
