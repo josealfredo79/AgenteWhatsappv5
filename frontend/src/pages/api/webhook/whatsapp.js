@@ -123,21 +123,55 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  return `Eres Claude, asesor inmobiliario.
+  // Construir sección de información ya conocida
+  let infoConocida = [];
+  if (estado.tipo_propiedad) infoConocida.push(`✅ Tipo de propiedad: ${estado.tipo_propiedad}`);
+  if (estado.zona) infoConocida.push(`✅ Zona: ${estado.zona}`);
+  if (estado.presupuesto) infoConocida.push(`✅ Presupuesto: ${estado.presupuesto}`);
+  
+  let infoFaltante = [];
+  if (!estado.tipo_propiedad) infoFaltante.push('❌ Tipo de propiedad (casa/terreno/departamento)');
+  if (!estado.zona) infoFaltante.push('❌ Zona o ciudad');
+  if (!estado.presupuesto) infoFaltante.push('❌ Presupuesto');
 
-INFORMACIÓN QUE NECESITAS DEL CLIENTE:
-1. Tipo (casa/terreno/departamento)
-2. Zona o ciudad  
-3. Presupuesto
+  return `Eres un asesor inmobiliario profesional en WhatsApp.
 
-REGLA CRÍTICA:
-Si el cliente YA mencionó algún dato en sus mensajes anteriores, NO vuelvas a preguntarlo.
-Lee TODO el historial antes de responder.
+═══════════════════════════════════════════════
+📋 INFORMACIÓN QUE YA TIENES DEL CLIENTE:
+${infoConocida.length > 0 ? infoConocida.join('\n') : '(Ninguna todavía)'}
 
-Si ya tienes los 3 datos → usa 'consultar_documentos'
+📝 INFORMACIÓN QUE AÚN FALTA:
+${infoFaltante.length > 0 ? infoFaltante.join('\n') : '(¡Ya tienes todo!)'}
+═══════════════════════════════════════════════
 
-Responde en máximo 3 líneas. Incluye al final:
-[ESTADO]{"tipo":"","zona":"","presupuesto":""}[/ESTADO]`;
+🎯 INSTRUCCIONES CRÍTICAS:
+
+1. **NUNCA vuelvas a preguntar información que YA TIENES** (marcada con ✅ arriba)
+   
+2. **Si ya tienes los 3 datos** (tipo, zona, presupuesto):
+   → Usa INMEDIATAMENTE la herramienta 'consultar_documentos'
+   → NO sigas haciendo preguntas
+   
+3. **Si te falta información** (marcada con ❌):
+   → Pregunta SOLO lo que falta
+   → Una pregunta a la vez
+   
+4. **Respuestas cortas**: Máximo 3 líneas de texto
+
+5. **Al final de tu respuesta**, incluye:
+   [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]
+
+═══════════════════════════════════════════════
+❌ EJEMPLO DE LO QUE NO DEBES HACER:
+
+Cliente: "Busco terreno en Zapopan"
+Tú: "¿Qué tipo de propiedad buscas?" ← ❌ YA LO DIJO
+
+✅ EJEMPLO CORRECTO:
+
+Cliente: "Busco terreno en Zapopan"  
+Tú: "Perfecto, ¿qué presupuesto manejas aproximadamente? 💰"
+═══════════════════════════════════════════════`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
@@ -166,31 +200,61 @@ function detectarInformacionDelMensaje(mensaje, estadoActual) {
   const mensajeLower = mensaje.toLowerCase();
   let nuevoEstado = { ...estadoActual };
   
-  // Detectar tipo de propiedad
+  // Detectar tipo de propiedad (más variaciones)
   if (!nuevoEstado.tipo_propiedad) {
-    if (mensajeLower.includes('terreno')) nuevoEstado.tipo_propiedad = 'terreno';
-    else if (mensajeLower.includes('casa')) nuevoEstado.tipo_propiedad = 'casa';
-    else if (mensajeLower.includes('departamento') || mensajeLower.includes('depto')) nuevoEstado.tipo_propiedad = 'departamento';
+    if (mensajeLower.match(/\b(terreno|lote|predio)s?\b/)) {
+      nuevoEstado.tipo_propiedad = 'terreno';
+    } else if (mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/)) {
+      nuevoEstado.tipo_propiedad = 'casa';
+    } else if (mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/)) {
+      nuevoEstado.tipo_propiedad = 'departamento';
+    }
   }
   
-  // Detectar zona (ciudades conocidas de Jalisco)
+  // Detectar zona (ciudades conocidas de Jalisco) - más flexible
   if (!nuevoEstado.zona) {
-    if (mensajeLower.includes('zapopan')) nuevoEstado.zona = 'Zapopan';
-    else if (mensajeLower.includes('guadalajara')) nuevoEstado.zona = 'Guadalajara';
-    else if (mensajeLower.includes('tlaquepaque')) nuevoEstado.zona = 'Tlaquepaque';
-    else if (mensajeLower.includes('tonalá')) nuevoEstado.zona = 'Tonalá';
-    else if (mensajeLower.includes('tlajomulco')) nuevoEstado.zona = 'Tlajomulco';
+    const zonas = [
+      { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
+      { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
+      { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
+      { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
+      { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
+      { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
+    ];
+    
+    for (const zona of zonas) {
+      if (zona.pattern.test(mensajeLower)) {
+        nuevoEstado.zona = zona.nombre;
+        break;
+      }
+    }
   }
   
-  // Detectar presupuesto
+  // Detectar presupuesto (más formatos)
   if (!nuevoEstado.presupuesto) {
-    const matchMillon = mensajeLower.match(/(\d+)\s*mill/);
-    const matchPesos = mensajeLower.match(/(\d{1,3}(?:,\d{3})*)/);
-    
+    // Formato: "2 millones", "3.5 millones", "medio millón"
+    const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
     if (matchMillon) {
       nuevoEstado.presupuesto = `${matchMillon[1]} millones`;
-    } else if (matchPesos && mensajeLower.includes('pesos')) {
-      nuevoEstado.presupuesto = `$${matchPesos[1]}`;
+    }
+    
+    // Formato: "500 mil", "800k"
+    const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
+    if (matchMil && !nuevoEstado.presupuesto) {
+      nuevoEstado.presupuesto = `${matchMil[1]} mil pesos`;
+    }
+    
+    // Formato: "$450,000", "450000 pesos"
+    const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
+    if (matchNumero && !nuevoEstado.presupuesto) {
+      nuevoEstado.presupuesto = `$${matchNumero[1]}`;
+    }
+    
+    // Formato: "medio millón", "un millón"
+    if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
+      nuevoEstado.presupuesto = '0.5 millones';
+    } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
+      nuevoEstado.presupuesto = '1 millón';
     }
   }
   
@@ -393,23 +457,12 @@ export default async function handler(req, res) {
       messages.shift();
     }
 
-    // Agregar mensaje actual CON CONTEXTO
-    let mensajeConContexto = Body;
-    
-    // Agregar resumen de lo que ya sabemos al mensaje
-    if (estadoActualizado.tipo_propiedad || estadoActualizado.zona || estadoActualizado.presupuesto) {
-      let resumen = '\n\n[CONTEXTO: ';
-      if (estadoActualizado.tipo_propiedad) resumen += `Ya dije que busco ${estadoActualizado.tipo_propiedad}. `;
-      if (estadoActualizado.zona) resumen += `Ya dije que en ${estadoActualizado.zona}. `;
-      if (estadoActualizado.presupuesto) resumen += `Ya dije presupuesto de ${estadoActualizado.presupuesto}.`;
-      resumen += ']';
-      mensajeConContexto += resumen;
-    }
-    
+    // Agregar mensaje actual del usuario
+    // Ya NO agregamos contexto redundante - el system prompt ya tiene esta info
     if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-      messages[messages.length - 1].content += '\n' + mensajeConContexto;
+      messages[messages.length - 1].content += '\n' + Body;
     } else {
-      messages.push({ role: 'user', content: mensajeConContexto });
+      messages.push({ role: 'user', content: Body });
     }
 
     // VALIDACIÓN FINAL: Debe terminar con mensaje del usuario
@@ -421,6 +474,12 @@ export default async function handler(req, res) {
     console.log(`💬 ${messages.length} mensajes → Claude (primer: ${messages[0]?.role}, último: ${messages[messages.length - 1]?.role})`);
 
     const systemPrompt = construirPromptConEstado(estadoActualizado);
+    
+    console.log('📊 Estado enviado a Claude:', {
+      tipo: estadoActualizado.tipo_propiedad || 'PENDIENTE',
+      zona: estadoActualizado.zona || 'PENDIENTE', 
+      presupuesto: estadoActualizado.presupuesto || 'PENDIENTE'
+    });
 
     console.log('📤 Enviando a Claude con estado estructurado');
 
