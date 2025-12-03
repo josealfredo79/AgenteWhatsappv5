@@ -1,8 +1,9 @@
-# 🤖 Agente WhatsApp con Claude AI
+# 🤖 Agente WhatsApp con Claude AI - v5.3.0
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2.23-black)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+[![Claude](https://img.shields.io/badge/Claude-3.5%20Haiku-orange)](https://www.anthropic.com/)
 [![Railway](https://img.shields.io/badge/Railway-Ready-0B0D0E)](https://railway.app/)
+[![Status](https://img.shields.io/badge/Status-Production%20Ready-green)](https://github.com)
 
 > ⚠️ **ADVERTENCIA DE SEGURIDAD:** 
 > 
@@ -10,18 +11,71 @@
 > 
 > Google, GitHub y otras plataformas escanean repositorios automáticamente e invalidan credenciales expuestas.
 
-Agente inteligente de WhatsApp con **Claude AI Haiku 4.5**, integración completa de **Google APIs** (Calendar, Sheets, Docs), y dashboard profesional en tiempo real.
+Agente inteligente de WhatsApp con **Claude 3.5 Haiku**, memoria conversacional persistente, integración completa de **Google APIs** (Calendar, Sheets, Docs), y dashboard profesional en tiempo real.
 
 ## ✨ Características Principales
 
-- 💬 **WhatsApp Messaging** vía Twilio
-- 🧠 **Claude AI Haiku 4.5** con tool calling para conversaciones inteligentes
+- 💬 **WhatsApp Messaging** vía Twilio con webhook automatizado
+- 🧠 **Claude 3.5 Haiku** con tool calling y memoria conversacional
+- 🧩 **Gestión de Estado Persistente** - Mantiene contexto entre sesiones
+- 📚 **Historial Conversacional** - Carga últimos 10 mensajes automáticamente
+- 🎯 **Detección Automática** - Extrae tipo, zona y presupuesto sin tool-use
 - 📅 **Agendamiento automático** en Google Calendar con links compartibles
-- 📊 **Registro de clientes** en Google Sheets
+- 📊 **Registro de clientes** en Google Sheets (Mensajes + Estados)
 - 📄 **Consulta de documentos** desde Google Docs
 - 🎨 **Dashboard profesional** estilo WhatsApp Web con Socket.io en tiempo real
 - 📱 **100% Responsive** - Mobile First Design
 - 🔒 **Seguro** - Variables de entorno y autenticación de dashboard
+
+---
+
+## 🚀 Deploy Rápido
+
+### Opción 1: Script Automatizado (⭐ RECOMENDADO)
+
+```bash
+# Ejecutar script de deploy
+./deploy-v5.3.sh
+```
+
+El script realiza:
+1. ✅ Verificación de entorno y dependencias
+2. ✅ Ejecución de tests (opcional)
+3. ✅ Creación de commit descriptivo
+4. ✅ Push a GitHub
+5. ✅ Guía de siguientes pasos
+
+### Opción 2: Deploy Manual
+
+```bash
+# 1. Hacer commit de cambios
+git add .
+git commit -m "deploy: Agente WhatsApp v5.3.0"
+
+# 2. Push a GitHub
+git push origin main
+
+# 3. Railway hará deploy automático
+```
+
+---
+
+## 📦 Instalación y Configuración
+
+### Pre-requisitos
+
+- Node.js 18+ instalado
+- Cuenta en [Railway.app](https://railway.app)
+- Cuenta en [Twilio](https://www.twilio.com) con WhatsApp Sandbox
+- Cuenta de servicio de Google Cloud con APIs habilitadas
+- Google Sheet, Google Doc y Google Calendar configurados
+
+### Configuración Paso a Paso
+
+**Consulta la documentación detallada:**
+- 📋 [CHECKLIST_VALIDACION.md](CHECKLIST_VALIDACION.md) - Checklist completo de validación
+- 📖 [INSTRUCCIONES_VALIDACION_PRODUCCION.md](INSTRUCCIONES_VALIDACION_PRODUCCION.md) - Guía paso a paso
+- 🔧 [VARIABLES_ENTORNO_RAILWAY.txt](VARIABLES_ENTORNO_RAILWAY.txt) - Variables de entorno necesarias
 
 ---
 

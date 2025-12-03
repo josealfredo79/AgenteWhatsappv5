@@ -123,21 +123,54 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  const tieneInfo = estado.tipo_propiedad && estado.zona && estado.presupuesto;
-  
-  return `Eres un agente inmobiliario profesional.
+  let infoConocida = [];
+  if (estado.tipo_propiedad) {
+    infoConocida.push(`- Tipo de propiedad: ${estado.tipo_propiedad}`);
+  }
+  if (estado.zona) {
+    infoConocida.push(`- Zona/Ciudad: ${estado.zona}`);
+  }
+  if (estado.presupuesto) {
+    infoConocida.push(`- Presupuesto: ${estado.presupuesto}`);
+  }
 
-CONTEXTO PERSISTENTE:
-${estado.tipo_propiedad ? `- Tipo: ${estado.tipo_propiedad}` : ''}
-${estado.zona ? `- Zona: ${estado.zona}` : ''}
-${estado.presupuesto ? `- Presupuesto: ${estado.presupuesto}` : ''}
+  const estadoTexto = infoConocida.length > 0
+    ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**⚠️ CRÍTICO:** NUNCA vuelvas a preguntar por estos datos. El cliente YA te los proporcionó. Solo pregunta lo que falte.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
+    : '\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos que detectes (tipo, zona, presupuesto). Si no hay datos aún, usa valores vacíos.';
 
-PROTOCOLO:
-1. Si tienes tipo + zona + presupuesto → Llama consultar_documentos(query="${estado.tipo_propiedad} ${estado.zona} ${estado.presupuesto}")
-2. Si falta datos → Pregunta SOLO el primero que falte
-3. Respuestas breves y profesionales
+  return `Eres un Asesor Inmobiliario Senior, experto en ventas consultivas y atención al cliente. Tu nombre es Claude.
 
-ESTADO_ACTUAL: [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]`;
+**🔍 CONTEXTO IMPORTANTE:**
+Tienes acceso al historial completo de la conversación. Lee los mensajes anteriores para entender el contexto y NO repetir preguntas que ya hiciste o información que el cliente ya proporcionó.
+${estadoTexto}
+
+**OBJETIVO:**
+Guiar al cliente de manera profesional y empática hacia la compra de su propiedad ideal, recopilando solo la información que REALMENTE falte para ofrecerle las mejores opciones, o agendar una cita si ya muestra interés claro.
+
+**ESTILO DE COMUNICACIÓN:**
+- Profesional, cálido y directo (máximo 3-4 líneas por mensaje).
+- Usa emojis con moderación (1-2 por mensaje).
+- Escucha activa: valida lo que dice el cliente antes de preguntar.
+- **NUNCA repitas preguntas** sobre datos ya proporcionados en el historial.
+- Demuestra que recuerdas la conversación anterior.
+
+**FLUJO DE CONVERSACIÓN:**
+1. **PRIMERO:** Revisa el historial para saber qué información ya tienes.
+2. **LUEGO:** Si faltan datos (tipo, zona, presupuesto), pregunta SOLO lo que falte.
+3. **FINALMENTE:** Si ya tienes todos los datos, consulta propiedades y ofrece opciones.
+4. Si el cliente muestra interés, propón agendar una cita.
+
+**REGLAS DE NEGOCIO:**
+- No inventes propiedades. Usa solo la información de 'consultar_documentos'.
+- Si no sabes algo, ofrece averiguarlo.
+- Respeta el presupuesto del cliente.
+- Si el cliente saluda después de una conversación previa, reconoce que ya lo conoces.
+
+**GESTIÓN DE ESTADO (JSON OCULTO):**
+Al final de cada respuesta, incluye un bloque JSON con los datos actualizados que hayas detectado. Si no hay cambios, mantén los anteriores.
+[ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
+
+Zona horaria: America/Mexico_City`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
@@ -161,101 +194,6 @@ function extraerEstadoDeRespuesta(respuesta, estadoActual) {
   return estadoActual;
 }
 
-// Función auxiliar para detectar información del mensaje del usuario
-function detectarInformacionDelMensaje(mensaje, estadoActual) {
-  const mensajeLower = mensaje.toLowerCase();
-  let nuevoEstado = { ...estadoActual };
-  
-  // Detectar si el usuario está CAMBIANDO información (palabras clave)
-  const esCambio = mensajeLower.match(/\b(mejor|ahora|cambio|cambi[oó]|prefiero|en realidad|corrección|correcci[oó]n|no\s*,?\s*(quiero|busco|prefiero)|en vez de|instead)\b/);
-  
-  // Detectar tipo de propiedad (más variaciones)
-  const tipoDetectado = 
-    mensajeLower.match(/\b(terreno|lote|predio)s?\b/) ? 'terreno' :
-    mensajeLower.match(/\b(casa|residencia|vivienda)s?\b/) ? 'casa' :
-    mensajeLower.match(/\b(departamento|depto|piso|apartamento)s?\b/) ? 'departamento' :
-    null;
-  
-  // Solo actualizar si: NO tiene valor previo O está cambiando explícitamente
-  if (tipoDetectado) {
-    if (!nuevoEstado.tipo_propiedad) {
-      // No tenía valor, asignar
-      nuevoEstado.tipo_propiedad = tipoDetectado;
-    } else if (esCambio) {
-      // Tiene valor PERO usuario dice "mejor", "ahora", "prefiero", etc.
-      console.log(`🔄 Usuario cambió tipo: ${nuevoEstado.tipo_propiedad} → ${tipoDetectado}`);
-      nuevoEstado.tipo_propiedad = tipoDetectado;
-    }
-    // Si ya tiene valor y NO hay palabra de cambio, mantener el original
-  }
-  
-  // Detectar zona (ciudades conocidas de Jalisco) - más flexible
-  const zonas = [
-    { pattern: /\b(zapopan)\b/, nombre: 'Zapopan' },
-    { pattern: /\b(guadalajara|gdl)\b/, nombre: 'Guadalajara' },
-    { pattern: /\b(tlaquepaque)\b/, nombre: 'Tlaquepaque' },
-    { pattern: /\b(tonalá|tonala)\b/, nombre: 'Tonalá' },
-    { pattern: /\b(tlajomulco)\b/, nombre: 'Tlajomulco' },
-    { pattern: /\b(el salto)\b/, nombre: 'El Salto' }
-  ];
-  
-  let zonaDetectada = null;
-  for (const zona of zonas) {
-    if (zona.pattern.test(mensajeLower)) {
-      zonaDetectada = zona.nombre;
-      break;
-    }
-  }
-  
-  if (zonaDetectada) {
-    if (!nuevoEstado.zona) {
-      nuevoEstado.zona = zonaDetectada;
-    } else if (esCambio) {
-      console.log(`🔄 Usuario cambió zona: ${nuevoEstado.zona} → ${zonaDetectada}`);
-      nuevoEstado.zona = zonaDetectada;
-    }
-  }
-  
-  // Detectar presupuesto (más formatos)
-  let presupuestoDetectado = null;
-  
-  // Formato: "2 millones", "3.5 millones", "medio millón"
-  const matchMillon = mensajeLower.match(/(\d+(?:\.\d+)?)\s*mill(?:ones|ón)?/);
-  if (matchMillon) {
-    presupuestoDetectado = `${matchMillon[1]} millones`;
-  }
-  
-  // Formato: "500 mil", "800k"
-  const matchMil = mensajeLower.match(/(\d+)\s*(?:mil|k)\b/);
-  if (matchMil && !presupuestoDetectado) {
-    presupuestoDetectado = `${matchMil[1]} mil pesos`;
-  }
-  
-  // Formato: "$450,000", "450000 pesos"
-  const matchNumero = mensajeLower.match(/\$?\s*(\d{1,3}(?:,\d{3})+)/);
-  if (matchNumero && !presupuestoDetectado) {
-    presupuestoDetectado = `$${matchNumero[1]}`;
-  }
-  
-  // Formato: "medio millón", "un millón"
-  if (mensajeLower.includes('medio millón') || mensajeLower.includes('medio millon')) {
-    presupuestoDetectado = '0.5 millones';
-  } else if (mensajeLower.match(/\bun millón\b/) || mensajeLower.match(/\bun millon\b/)) {
-    presupuestoDetectado = '1 millón';
-  }
-  
-  if (presupuestoDetectado) {
-    if (!nuevoEstado.presupuesto) {
-      nuevoEstado.presupuesto = presupuestoDetectado;
-    } else if (esCambio) {
-      console.log(`🔄 Usuario cambió presupuesto: ${nuevoEstado.presupuesto} → ${presupuestoDetectado}`);
-      nuevoEstado.presupuesto = presupuestoDetectado;
-    }
-  }
-  
-  return nuevoEstado;
-}
-
 function limpiarRespuesta(respuesta) {
   return respuesta.replace(/\[ESTADO\].*?\[\/ESTADO\]/s, '').trim();
 }
@@ -263,7 +201,7 @@ function limpiarRespuesta(respuesta) {
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Busca propiedades disponibles en el catálogo. Usa esta herramienta cuando tengas: tipo de propiedad + zona + presupuesto del cliente.',
+    description: 'Consulta propiedades disponibles. Usa cuando tengas: tipo + zona + presupuesto.',
     input_schema: {
       type: 'object',
       properties: {
@@ -274,7 +212,7 @@ const tools = [
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda una cita para visitar una propiedad cuando el cliente confirme su interés.',
+    description: 'Agenda visita cuando el cliente CONFIRME interés en una propiedad específica.',
     input_schema: {
       type: 'object',
       properties: {
@@ -311,7 +249,7 @@ async function consultarDocumentos({ query }) {
   }
 }
 
-async function obtenerHistorialConversacion(telefono, limite = 10) {
+async function obtenerHistorialConversacion(telefono, limite = 10, excluirUltimoMensaje = true) {
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -324,9 +262,18 @@ async function obtenerHistorialConversacion(telefono, limite = 10) {
 
     const rows = response.data.values || [];
 
-    const mensajesCliente = rows
-      .filter(row => row[1] === telefono && row[3])
-      .slice(-limite);
+    let mensajesCliente = rows
+      .filter(row => row[1] === telefono && row[3]);
+
+    // Excluir el último mensaje (el que acabamos de guardar)
+    if (excluirUltimoMensaje && mensajesCliente.length > 0) {
+      mensajesCliente = mensajesCliente.slice(0, -1);
+    }
+
+    // Tomar los últimos N mensajes
+    mensajesCliente = mensajesCliente.slice(-limite);
+
+    console.log(`📚 Cargando ${mensajesCliente.length} mensajes del historial para ${telefono}`);
 
     return mensajesCliente.map(row => ({
       direccion: row[2],
@@ -401,95 +348,41 @@ export default async function handler(req, res) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const estado = await obtenerEstadoConversacion(telefono);
-    
-    // IMPORTANTE: Detectar información del mensaje ACTUAL antes de enviar a Claude
-    const estadoActualizado = detectarInformacionDelMensaje(Body, estado);
-    
     console.log('📋 Estado actual:', JSON.stringify(estado));
-    console.log('🔍 Estado detectado del mensaje:', JSON.stringify(estadoActualizado));
-    console.log('📋 Tipo:', estadoActualizado.tipo_propiedad || 'NO DEFINIDO');
-    console.log('📋 Zona:', estadoActualizado.zona || 'NO DEFINIDO');
-    console.log('📋 Presupuesto:', estadoActualizado.presupuesto || 'NO DEFINIDO');
-    
-    // CRÍTICO: Guardar estado INMEDIATAMENTE si detectamos información nueva
-    if (estadoActualizado.tipo_propiedad !== estado.tipo_propiedad ||
-        estadoActualizado.zona !== estado.zona ||
-        estadoActualizado.presupuesto !== estado.presupuesto) {
-      console.log('💾 Guardando estado actualizado ANTES de enviar a Claude...');
-      await guardarEstadoConversacion(estadoActualizado);
-    }
 
-    const historial = await obtenerHistorialConversacion(telefono, 10);
-    console.log(`📚 Historial: ${historial.length} mensajes cargados`);
-    
-    // DEBUG: Mostrar historial completo
-    if (historial.length > 0) {
-      console.log('📜 HISTORIAL COMPLETO:');
-      historial.forEach((msg, idx) => {
-        console.log(`  ${idx + 1}. [${msg.direccion}] ${msg.mensaje.substring(0, 80)}...`);
-      });
-    }
+    const historial = await obtenerHistorialConversacion(telefono, 10, true);
 
     let messages = [];
 
     if (historial.length > 0) {
-      // Construir mensajes con validación de alternancia
+      // Construir array de mensajes del historial
       historial.forEach(msg => {
         const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
         const contenido = limpiarRespuesta(msg.mensaje);
-        
-        if (contenido && contenido.trim()) {
-          const lastRole = messages.length > 0 ? messages[messages.length - 1].role : null;
-          
-          // Solo agregar si alterna correctamente
-          if (role !== lastRole) {
-            messages.push({ role, content: contenido });
-          } else {
-            // Fusionar mensajes consecutivos del mismo rol
-            if (messages.length > 0) {
-              messages[messages.length - 1].content += '\n' + contenido;
-            }
-          }
+        if (contenido) {
+          messages.push({ role, content: contenido });
         }
       });
+
+      // Validar que el último mensaje del historial sea 'assistant'
+      // para que el nuevo mensaje 'user' alterne correctamente
+      if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+        console.log('⚠️ Último mensaje del historial es user, removiendo para mantener alternancia');
+        messages.pop();
+      }
     }
 
-    // VALIDACIÓN: El primer mensaje DEBE ser del usuario
-    if (messages.length > 0 && messages[0].role === 'assistant') {
-      console.warn('⚠️ Removiendo mensaje inicial del asistente');
-      messages.shift();
-    }
+    // Agregar el mensaje actual del usuario
+    messages.push({ role: 'user', content: Body });
 
-    // Agregar mensaje actual del usuario
-    // Ya NO agregamos contexto redundante - el system prompt ya tiene esta info
-    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-      messages[messages.length - 1].content += '\n' + Body;
-    } else {
-      messages.push({ role: 'user', content: Body });
-    }
+    const systemPrompt = construirPromptConEstado(estado);
 
-    // VALIDACIÓN FINAL: Debe terminar con mensaje del usuario
-    if (messages.length === 0 || messages[messages.length - 1].role !== 'user') {
-      console.error('❌ Error en construcción de mensajes');
-      messages = [{ role: 'user', content: Body }];
-    }
-
-    console.log(`💬 ${messages.length} mensajes → Claude (primer: ${messages[0]?.role}, último: ${messages[messages.length - 1]?.role})`);
-
-    const systemPrompt = construirPromptConEstado(estadoActualizado);
-    
-    console.log('📊 Estado enviado a Claude:', {
-      tipo: estadoActualizado.tipo_propiedad || 'PENDIENTE',
-      zona: estadoActualizado.zona || 'PENDIENTE', 
-      presupuesto: estadoActualizado.presupuesto || 'PENDIENTE'
-    });
-
-    console.log('📤 Enviando a Claude con estado estructurado');
+    console.log(`💬 Enviando ${messages.length} mensajes a Claude (${historial.length} historial + 1 actual)`);
+    console.log('📝 Roles:', messages.map(m => m.role).join(' → '));
 
     let response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
       max_tokens: 500,
-      temperature: 0.7,
       system: systemPrompt,
       tools,
       messages
@@ -510,7 +403,6 @@ export default async function handler(req, res) {
       response = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
         max_tokens: 500,
-        temperature: 0.7,
         system: systemPrompt,
         tools,
         messages
@@ -519,7 +411,7 @@ export default async function handler(req, res) {
 
     const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
 
-    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estadoActualizado);
+    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estado);
     await guardarEstadoConversacion(nuevoEstado);
 
     const respuestaLimpia = limpiarRespuesta(respuestaCompleta);

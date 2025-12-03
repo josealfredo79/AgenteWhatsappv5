@@ -1,244 +1,352 @@
-# ✅ DEPLOY COMPLETADO - Instrucciones de Validación
+# 🚀 INSTRUCCIONES DE VALIDACIÓN EN PRODUCCIÓN
 
-## 🚀 ESTADO DEL DEPLOY
+## 📌 Requisitos Previos
 
-**Commits desplegados:**
-```
-e2df3e2 - fix: Mejorar SYSTEM_PROMPT para evitar preguntas repetidas
-f4fb91b - fix: Corrección pérdida contexto - límite 10 + validación alternancia
-```
-
-**Fecha:** 2 de diciembre de 2025
-**Hora:** Completado
-**Plataforma:** Railway (auto-deploy desde GitHub)
-**Branch:** main
+Antes de comenzar, asegúrate de tener:
+- ✅ Cuenta activa en Railway.app
+- ✅ Cuenta de Twilio con WhatsApp Sandbox configurado
+- ✅ Cuenta de servicio de Google Cloud con APIs habilitadas
+- ✅ Google Sheet con hojas "Mensajes" y "Estados"
+- ✅ Google Doc con catálogo de propiedades
+- ✅ Google Calendar configurado
 
 ---
 
-## 🧪 CÓMO VALIDAR QUE FUNCIONA
+## 🔧 FASE 1: CONFIGURACIÓN INICIAL
 
-### Test Secuencial (5 minutos):
+### Paso 1: Preparar Google Sheets
 
-Envía estos mensajes **UNO POR UNO** a tu número de WhatsApp de Twilio:
+1. **Crear/Abrir el Google Sheet**
+   - Ve a [sheets.google.com](https://sheets.google.com)
+   - Crea un nuevo spreadsheet o abre el existente
+   - Copia el ID del Sheet (está en la URL)
 
-```
-PASO 1:
-Mensaje: "Hola"
-Esperado: Saludo + pregunta qué necesitas
-✅/❌ _______
+2. **Crear Hoja "Mensajes"**
+   ```
+   Columna A: Timestamp
+   Columna B: Telefono
+   Columna C: Direccion
+   Columna D: Mensaje
+   Columna E: MessageId
+   ```
 
-PASO 2:
-Mensaje: "Quiero un terreno en Zapopan"
-Esperado: "Perfecto, terreno en Zapopan. ¿Qué presupuesto manejas?"
-         (NO debe preguntar tipo ni zona porque YA lo dijiste)
-✅/❌ _______
+3. **Crear Hoja "Estados"**
+   ```
+   Columna A: Telefono
+   Columna B: TipoPropiedad
+   Columna C: Zona
+   Columna D: Presupuesto
+   Columna E: Etapa
+   Columna F: Resumen
+   Columna G: UltimaActualizacion
+   ```
 
-PASO 3:
-Mensaje: "2 millones de pesos"
-Esperado: Debe CONSULTAR documentos y mostrar opciones
-         (NO debe volver a preguntar tipo, zona o presupuesto)
-✅/❌ _______
+4. **Compartir con la cuenta de servicio**
+   - Click en "Compartir" (arriba derecha)
+   - Agregar el email de la cuenta de servicio (termina en @*.iam.gserviceaccount.com)
+   - Rol: **Editor**
+   - Desmarcar "Notificar a las personas"
+   - Click en "Compartir"
 
-PASO 4:
-Mensaje: "Quiero más información del primero"
-Esperado: Respuesta contextual sobre la propiedad mencionada
-         (Debe recordar toda la conversación)
-✅/❌ _______
-```
+### Paso 2: Preparar Google Docs
 
----
+1. **Crear documento de propiedades**
+   - Ve a [docs.google.com](https://docs.google.com)
+   - Crea un nuevo documento
+   - Agregar propiedades en formato:
+   ```
+   TERRENO EN ZAPOPAN
+   Ubicación: Zapopan, Jalisco
+   Precio: $2,000,000 MXN
+   Superficie: 500 m²
+   Características: Zona residencial, servicios completos
+   
+   CASA EN TLAQUEPAQUE
+   Ubicación: Tlaquepaque, Jalisco
+   Precio: $3,500,000 MXN
+   Características: 3 recámaras, 2 baños, cochera
+   ```
 
-## ✅ CRITERIOS DE ÉXITO
+2. **Compartir con cuenta de servicio**
+   - Click en "Compartir"
+   - Agregar email de cuenta de servicio
+   - Rol: **Lector**
+   - Compartir
 
-**El fix funcionó si:**
+3. **Copiar ID del documento**
+   - Está en la URL: `docs.google.com/document/d/ESTE_ES_EL_ID/edit`
 
-1. ✅ **0 preguntas repetidas**
-   - Bot NO pregunta tipo después de decir "terreno"
-   - Bot NO pregunta zona después de decir "Zapopan"
-   - Bot NO pregunta presupuesto después de decir "2 millones"
+### Paso 3: Preparar Google Calendar
 
-2. ✅ **Continuidad perfecta**
-   - Cada respuesta construye sobre la anterior
-   - Bot "recuerda" todo lo conversado
-   - No hay reseteos ni re-presentaciones
+1. **Abrir Google Calendar**
+   - Ve a [calendar.google.com](https://calendar.google.com)
+   - Usa el calendario principal o crea uno nuevo
 
-3. ✅ **Usa herramientas correctamente**
-   - Cuando tiene tipo + zona + presupuesto → consulta documentos
-   - No consulta documentos sin tener los 3 datos
+2. **Compartir calendario**
+   - Click en ⚙️ Settings
+   - Click en el calendario a usar
+   - En "Compartir con personas específicas", agregar:
+     - Email de cuenta de servicio
+     - Permisos: **Hacer cambios en eventos**
 
----
-
-## 📊 LOGS EN RAILWAY (Opcional)
-
-Si quieres verificar técnicamente:
-
-**1. Ir a Railway Dashboard:**
-- https://railway.app/dashboard
-- Seleccionar proyecto `whatsappv5`
-- Tab "Deployments"
-- Ver último deployment
-
-**2. Ver Logs en tiempo real:**
-- Click en "View Logs"
-- Enviar mensaje de prueba
-- Buscar estos logs:
-
-```bash
-✅ LOGS CORRECTOS (esperados):
-📚 Historial: 4 mensajes cargados
-📜 HISTORIAL COMPLETO:
-  1. [inbound] Hola
-  2. [outbound] ¡Hola! 👋...
-  3. [inbound] Quiero un terreno en Zapopan
-  4. [outbound] ¿Qué presupuesto manejas?
-📋 Tipo: terreno
-📋 Zona: Zapopan
-📋 Presupuesto: 2 millones
-💬 5 mensajes → Claude (primer: user, último: user)
-🔧 Tool: consultar_documentos
-✅ Respuesta enviada
-
-❌ LOGS PROBLEMÁTICOS (no deberían aparecer):
-⚠️ Removiendo mensaje inicial del asistente
-❌ Error en construcción de mensajes
-📋 Tipo: NO DEFINIDO (después de que lo dijiste)
-```
+3. **Copiar Calendar ID**
+   - En Settings del calendario
+   - Buscar "Integrar calendario"
+   - Copiar el "ID del calendario"
 
 ---
 
-## 🔍 TROUBLESHOOTING
+## 🚀 FASE 2: DEPLOY EN RAILWAY
 
-### Si aún hace preguntas repetidas:
+### Paso 1: Conectar Repositorio
 
-**Posible causa 1: Deploy no completado**
-```bash
-# Esperar 2-3 minutos más
-# Railway tarda en deployar
-```
+1. **Ir a Railway**
+   - Ve a [railway.app](https://railway.app)
+   - Login con GitHub
 
-**Posible causa 2: Caché de WhatsApp**
-```bash
-# Prueba con OTRO número de teléfono
-# O espera 5 minutos
-```
+2. **Crear nuevo proyecto**
+   - Click en "New Project"
+   - Click en "Deploy from GitHub repo"
+   - Seleccionar tu repositorio
+   - Click en "Deploy Now"
 
-**Posible causa 3: Error en deploy**
-```bash
-# Revisar Railway logs
-# Buscar errores de build
-```
+### Paso 2: Configurar Variables de Entorno
 
-### Si el bot no responde:
+1. **Ir a Variables**
+   - En el proyecto, click en "Variables"
+   - Click en "Raw Editor"
 
-1. Verificar variables de entorno en Railway:
-   - `ANTHROPIC_API_KEY`
-   - `TWILIO_ACCOUNT_SID`
-   - `TWILIO_AUTH_TOKEN`
-   - `TWILIO_WHATSAPP_NUMBER`
+2. **Copiar y pegar variables**
+   ```bash
+   ANTHROPIC_API_KEY=tu_clave_de_anthropic
+   TWILIO_ACCOUNT_SID=tu_account_sid
+   TWILIO_AUTH_TOKEN=tu_auth_token
+   TWILIO_WHATSAPP_NUMBER=+14155238886
+   GOOGLE_CREDENTIALS_JSON={"type":"service_account",...todo el JSON en una línea...}
+   GOOGLE_CALENDAR_ID=tu_calendar_id@group.calendar.google.com
+   GOOGLE_SHEET_ID=1-YTVjIqYO-m1XS_t_MRUlE7O4u_8WXKiZTQLh8BrhSE
+   GOOGLE_DOCS_ID=1CWRkJNcsScJOK-NMxtxnUdpuxrYcqaru5qiu9rHzbbw
+   NODE_ENV=production
+   ```
 
-2. Verificar webhook configurado en Twilio:
-   - URL debe apuntar a Railway
-   - Método: POST
-   - Path: `/api/webhook/whatsapp`
+3. **Guardar**
+   - Click en "Update Variables"
+   - Railway hará redeploy automáticamente
 
----
+### Paso 3: Verificar Deploy
 
-## 📈 MEJORAS IMPLEMENTADAS
+1. **Ver Logs**
+   - Click en "Deployments"
+   - Click en el deployment activo
+   - Click en "View Logs"
 
-### Deploy 1 (Commit f4fb91b):
-- ✅ Límite historial: 3 → 10 mensajes
-- ✅ Validación alternancia roles
-- ✅ Fusión mensajes consecutivos
-- ✅ Multiple failsafes
+2. **Buscar mensajes de éxito**
+   ```
+   ✅ Servidor Next.js + Socket.io + MCP listo
+   ✅ Puerto: XXXX
+   ```
 
-### Deploy 2 (Commit e2df3e2):
-- ✅ System prompt más directo y explícito
-- ✅ Ejemplo concreto de error en prompt
-- ✅ Reglas con ❌ ✅ para claridad visual
-- ✅ Logging detallado historial + estado
-
----
-
-## 🎯 RESULTADO ESPERADO
-
-**Conversación ideal después del fix:**
-
-```
-[Usuario] Hola
-[Bot] ¡Hola! 👋 ¿En qué puedo ayudarte?
-
-[Usuario] Quiero un terreno en Zapopan
-[Bot] Perfecto, terreno en Zapopan. ¿Qué presupuesto manejas? 💰
-
-[Usuario] 2 millones de pesos
-[Bot] Excelente, revisando terrenos en Zapopan hasta 2M...
-      
-      🏡 Terreno 250m² - Centro - $1,800,000
-      📍 Terreno 300m² - Las Lomas - $1,950,000
-      
-      ¿Alguna te interesa?
-
-[Usuario] El de Las Lomas
-[Bot] Perfecto, el terreno de Las Lomas cuenta con...
-      ¿Te gustaría agendar una visita?
-```
-
-**Características:**
-- ✅ Flujo natural y progresivo
-- ✅ Cada pregunta basada en respuesta anterior
-- ✅ 0 preguntas sobre datos ya mencionados
-- ✅ Consulta documentos automáticamente
-- ✅ Experiencia profesional
+3. **Obtener URL de la aplicación**
+   - En Settings → Domains
+   - Copiar la URL generada: `https://tu-app.railway.app`
 
 ---
 
-## 📞 SI NECESITAS AYUDA
+## 📱 FASE 3: CONFIGURAR TWILIO WEBHOOK
 
-**Documentación generada:**
-1. `ANALISIS_CONTEXTO_CORREGIDO.md` - Análisis técnico completo
-2. `REPORTE_COMPARATIVO_FINAL.md` - Comparación con repo funcional
-3. `RESUMEN_EJECUTIVO.md` - Resumen ejecutivo
-4. `CORRECCION_PROMPT_SISTEMA.md` - Fix del prompt
-5. `INSTRUCCIONES_VALIDACION_PRODUCCION.md` - Este documento
+### Paso 1: Ir a Twilio Console
 
-**Tests automatizados:**
-```bash
-cd /home/josealfredo/proyecto-whatsappv5/frontend
-npm test tests/context.test.js
-```
+1. **Abrir Twilio Console**
+   - Ve a [console.twilio.com](https://console.twilio.com)
+   - Login con tu cuenta
 
----
+2. **Ir a WhatsApp Sandbox**
+   - Menú lateral: Messaging → Try it out → Send a WhatsApp message
 
-## ✨ PRÓXIMO PASO
+### Paso 2: Configurar Webhook
 
-**🧪 PROBAR AHORA MISMO:**
+1. **En "Sandbox Configuration"**
+   - Scroll hasta "When a message comes in"
+   - URL: `https://tu-app.railway.app/api/webhook/whatsapp`
+   - Método: **POST**
+   - Click en "Save"
 
-1. Abre WhatsApp
-2. Envía mensaje al número de Twilio
-3. Sigue la secuencia del test
-4. Valida que NO haya preguntas repetidas
+2. **Conectar tu teléfono**
+   - Sigue las instrucciones para conectar tu WhatsApp
+   - Envía el código de activación
 
 ---
 
-**Deploy Status:** ✅ COMPLETADO  
-**Tiempo estimado Railway:** 2-3 minutos desde push  
-**Confianza:** ALTA  
-**Listo para:** VALIDACIÓN EN PRODUCCIÓN 🚀
+## 🧪 FASE 4: PRUEBAS DE VALIDACIÓN
+
+### Test 1: Primera Conversación
+
+1. **Enviar desde WhatsApp**
+   ```
+   Hola
+   ```
+
+2. **Verificar respuesta**
+   - Debe responder con saludo
+   - Debe preguntar qué tipo de propiedad buscas
+
+3. **Verificar en Google Sheets**
+   - Abrir hoja "Mensajes"
+   - Debe haber 2 filas nuevas (entrada y salida)
+   - Abrir hoja "Estados"
+   - Debe haber 1 fila con tu número
+
+### Test 2: Proporcionar Información
+
+1. **Enviar**
+   ```
+   Busco un terreno
+   ```
+
+2. **Verificar**
+   - Debe reconocer "terreno"
+   - Debe preguntar por zona
+   - En hoja "Estados", columna B debe tener "terreno"
+
+3. **Enviar**
+   ```
+   En Zapopan
+   ```
+
+4. **Verificar**
+   - Debe preguntar por presupuesto
+   - En hoja "Estados", columna C debe tener "Zapopan"
+
+### Test 3: Búsqueda de Propiedades
+
+1. **Enviar**
+   ```
+   Tengo 2 millones
+   ```
+
+2. **Verificar**
+   - Debe buscar en Google Docs
+   - Debe mostrar propiedades disponibles
+   - En hoja "Estados", columna D debe tener "2 millones"
+
+### Test 4: Memoria Conversacional (CRÍTICO)
+
+1. **Cerrar WhatsApp completamente**
+2. **Esperar 5 minutos**
+3. **Abrir WhatsApp y enviar**
+   ```
+   ¿Qué opciones me habías mencionado?
+   ```
+
+4. **Verificar (ESTO ES LO MÁS IMPORTANTE)**
+   - ✅ Debe recordar: terreno, Zapopan, 2 millones
+   - ✅ Debe mencionar las propiedades anteriores
+   - ✅ NO debe volver a preguntar tipo, zona o presupuesto
+   - ✅ Debe continuar la conversación naturalmente
+
+### Test 5: Agendar Cita
+
+1. **Enviar**
+   ```
+   Me interesa el terreno, quiero agendar una visita
+   ```
+
+2. **Verificar**
+   - Debe preguntar fecha y hora
+   
+3. **Enviar**
+   ```
+   El viernes 6 de diciembre a las 3 PM
+   ```
+
+4. **Verificar**
+   - Debe confirmar la cita
+   - Debe aparecer en Google Calendar
+   - Debe enviar link de confirmación
 
 ---
 
-## 📊 CHECKLIST FINAL
+## 🔍 FASE 5: MONITOREO DE LOGS
 
-- [x] Código corregido
-- [x] Tests pasando 9/9
-- [x] Commit creado
-- [x] Push a GitHub
-- [x] Deploy automático Railway (en progreso)
-- [ ] **→ VALIDAR EN WHATSAPP** ← TU TURNO
-- [ ] Confirmar 0 preguntas repetidas
-- [ ] Confirmar continuidad perfecta
-- [ ] Monitorear 1 hora
+### Ver Logs en Railway
+
+1. **Ir a Railway Dashboard**
+2. **Click en Deployments → Ver logs activos**
+
+3. **Logs esperados al recibir mensaje**
+   ```
+   📨 Mensaje de +5215512345678 : Hola
+   📋 Estado actual: {"telefono":"+5215512345678",...}
+   📚 Cargando 0 mensajes del historial
+   💬 Enviando 1 mensajes a Claude
+   🔧 Tool: (si aplica)
+   ✅ Respuesta enviada, estado guardado
+   ```
+
+### Verificar Errores
+
+Si hay errores, buscar:
+- ❌ Error obtener estado → Revisar permisos Google Sheets
+- ❌ Error docs → Revisar GOOGLE_DOCS_ID y permisos
+- ❌ Error cita → Revisar GOOGLE_CALENDAR_ID y permisos
+- ❌ Error Twilio → Revisar TWILIO_* credentials
 
 ---
 
-**¡Listo! Ahora prueba en WhatsApp y confirma que funciona!** 🎉
+## ✅ CHECKLIST FINAL
+
+- [ ] WhatsApp responde mensajes
+- [ ] Mensajes se guardan en Google Sheets
+- [ ] Estado se mantiene entre mensajes
+- [ ] Historial se carga correctamente
+- [ ] No repite preguntas sobre datos ya proporcionados
+- [ ] Busca propiedades cuando tiene datos completos
+- [ ] Agenda citas en Google Calendar
+- [ ] Múltiples conversaciones no se cruzan
+
+---
+
+## 🚨 TROUBLESHOOTING COMÚN
+
+### Problema: No responde mensajes
+
+**Solución:**
+1. Verificar webhook en Twilio está correcto
+2. Verificar que la URL de Railway funciona
+3. Ver logs en Railway para ver el error
+
+### Problema: No recuerda conversaciones
+
+**Solución:**
+1. Verificar que `obtenerHistorialConversacion()` se ejecuta
+2. Ver logs: debe decir "📚 Cargando X mensajes"
+3. Verificar hoja "Mensajes" tiene los registros
+
+### Problema: Error al guardar estado
+
+**Solución:**
+1. Verificar permisos de Google Sheets (cuenta de servicio debe ser Editor)
+2. Verificar GOOGLE_SHEET_ID es correcto
+3. Verificar hojas "Mensajes" y "Estados" existen
+
+### Problema: No encuentra propiedades
+
+**Solución:**
+1. Verificar GOOGLE_DOCS_ID
+2. Verificar permisos de lectura en el documento
+3. Verificar que el documento tiene contenido
+
+---
+
+## 📞 SOPORTE
+
+Si después de seguir todos los pasos sigue sin funcionar:
+
+1. **Revisar logs completos en Railway**
+2. **Verificar todas las variables de entorno**
+3. **Probar endpoints manualmente:**
+   ```bash
+   curl https://tu-app.railway.app/api/health
+   ```
+
+4. **Documentar el error exacto y consultarlo**

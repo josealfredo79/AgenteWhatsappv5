@@ -1,272 +1,187 @@
-# ✅ CHECKLIST DE VALIDACIÓN - Corrección Contexto
+# ✅ CHECKLIST DE VALIDACIÓN - Agente WhatsApp v5
 
-## 📋 VERIFICACIÓN DE CAMBIOS IMPLEMENTADOS
+## 📋 Pre-Deploy
 
-### ✅ Código Modificado
+### 1. Código
+- [x] Todas las dependencias instaladas en `package.json`
+- [x] Archivo `whatsapp.js` con gestión de estado y historial
+- [x] Función `obtenerHistorialConversacion()` implementada
+- [x] Función `guardarEstadoConversacion()` implementada
+- [x] Sistema de prompt con contexto estructurado
+- [x] Manejo correcto de tool use (consultar_documentos, agendar_cita)
 
-- [x] **Límite de historial aumentado de 3 a 10**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` línea 247
-  - Antes: `limite = 3`
-  - Después: `limite = 10`
-  - Verificado: ✅
+### 2. Configuración
+- [ ] Variables de entorno configuradas en Railway:
+  - [ ] `ANTHROPIC_API_KEY`
+  - [ ] `TWILIO_ACCOUNT_SID`
+  - [ ] `TWILIO_AUTH_TOKEN`
+  - [ ] `TWILIO_WHATSAPP_NUMBER`
+  - [ ] `GOOGLE_CREDENTIALS_JSON`
+  - [ ] `GOOGLE_SHEET_ID`
+  - [ ] `GOOGLE_DOCS_ID`
+  - [ ] `GOOGLE_CALENDAR_ID`
+  - [ ] `NODE_ENV=production`
 
-- [x] **Validación de alternancia de roles**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` líneas 344-366
-  - Implementa: Verificación `role !== lastRole`
-  - Fusiona: Mensajes consecutivos del mismo rol
-  - Verificado: ✅
+### 3. Google Sheets
+- [ ] Hoja "Mensajes" con columnas: Timestamp, Telefono, Direccion, Mensaje, MessageId
+- [ ] Hoja "Estados" con columnas: Telefono, TipoPropiedad, Zona, Presupuesto, Etapa, Resumen, UltimaActualizacion
+- [ ] Permisos de edición para la cuenta de servicio
 
-- [x] **Validación primer mensaje debe ser 'user'**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` líneas 369-372
-  - Implementa: `if (messages[0].role === 'assistant') messages.shift()`
-  - Verificado: ✅
+### 4. Google Docs
+- [ ] Documento con catálogo de propiedades creado
+- [ ] Permisos de lectura para la cuenta de servicio
 
-- [x] **Fusión inteligente mensaje actual**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` líneas 374-379
-  - Implementa: Fusiona si último mensaje era 'user'
-  - Verificado: ✅
-
-- [x] **Validación final failsafe**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` líneas 381-385
-  - Implementa: Garantiza mensaje válido siempre
-  - Verificado: ✅
-
-- [x] **Temperatura explícita en configuración Claude**
-  - Archivo: `frontend/src/pages/api/webhook/whatsapp.js` línea 395
-  - Agregado: `temperature: 0.7`
-  - Verificado: ✅
-
-- [x] **Logs mejorados para debugging**
-  - Línea 340: `📚 Historial: X mensajes cargados`
-  - Línea 387: `💬 X mensajes → Claude (primer: X, último: X)`
-  - Verificado: ✅
+### 5. Google Calendar
+- [ ] Calendario configurado
+- [ ] Permisos de edición para la cuenta de servicio
 
 ---
 
-## 🧪 TESTS VALIDADOS
+## 🚀 Post-Deploy
 
-- [x] **Tests unitarios ejecutados**
-  - Comando: `npm test tests/context.test.js`
-  - Resultado: **9/9 PASANDO**
-  - Tiempo: 0.885s
-  - Verificado: ✅
+### 1. Verificar Deploy en Railway
+- [ ] Status: SUCCESS ✅
+- [ ] Build completado sin errores
+- [ ] Servicio ACTIVE
 
-### Detalle de Tests:
+### 2. Verificar Logs
+Buscar en logs de Railway:
+- [ ] ✅ Servidor Next.js listo
+- [ ] Sin errores de autenticación Google
+- [ ] Sin errores de conexión Twilio
 
-- [x] ✅ Debe cargar historial correctamente (18 ms)
-- [x] ✅ Debe construir array de mensajes alternados (14 ms)
-- [x] ✅ Debe incluir el nuevo mensaje al final (8 ms)
-- [x] ✅ Debe mantener contexto de al menos 5 turnos (6 ms)
-- [x] ✅ Debe fusionar mensajes consecutivos del mismo rol (5 ms)
-- [x] ✅ Debe manejar casos extremos - historial vacío (3 ms)
-- [x] ✅ Debe validar formato de mensajes para Claude API (34 ms)
-- [x] ✅ Performance - procesar 100 mensajes < 100ms (11 ms)
-- [x] ✅ Debe generar payload válido para Claude (11 ms)
-
----
-
-## 📄 DOCUMENTACIÓN GENERADA
-
-- [x] **ANALISIS_CONTEXTO_CORREGIDO.md**
-  - Análisis técnico detallado
-  - Fundamentos de API stateless
-  - Ejemplos de código antes/después
-  - Referencias oficiales
-  - Verificado: ✅
-
-- [x] **REPORTE_COMPARATIVO_FINAL.md**
-  - Comparación con whatsapp-agent-v1
-  - Tabla de diferencias
-  - Métricas de mejora
-  - Ejemplo de flujo mejorado
-  - Verificado: ✅
-
-- [x] **RESUMEN_EJECUTIVO.md**
-  - Resumen para stakeholders
-  - Problema → Solución → Resultados
-  - Próximos pasos
-  - Verificado: ✅
-
-- [x] **CHECKLIST_VALIDACION.md**
-  - Este documento
-  - Verificado: ✅
+### 3. Configurar Webhook de Twilio
+- [ ] Ir a Twilio Console > WhatsApp Sandbox
+- [ ] Webhook URL: `https://tu-app.railway.app/api/webhook/whatsapp`
+- [ ] Método: POST
+- [ ] Guardar configuración
 
 ---
 
-## 🔍 VERIFICACIÓN DE SINTAXIS
+## 🧪 Pruebas Funcionales
 
-- [x] **Sin errores de linting**
-  - Ejecutado: `get_errors` en whatsapp.js
-  - Resultado: "No errors found"
-  - Verificado: ✅
+### Test 1: Primer Mensaje (Sin Historial)
+**Enviar:** "Hola"
+**Esperar:**
+- ✅ Respuesta de saludo
+- ✅ Pregunta sobre tipo de propiedad
+- ✅ Mensaje guardado en hoja "Mensajes"
+- ✅ Estado inicial guardado en hoja "Estados"
 
-- [x] **Formato de código correcto**
-  - Indentación consistente
-  - Nombres de variables claros
-  - Comentarios descriptivos
-  - Verificado: ✅
+### Test 2: Continuación de Conversación
+**Enviar:** "Busco un terreno"
+**Esperar:**
+- ✅ Respuesta reconociendo el tipo
+- ✅ Pregunta sobre zona/ciudad
+- ✅ Estado actualizado con tipo_propiedad="terreno"
+- ✅ NO vuelve a preguntar por tipo
 
----
+### Test 3: Contexto Persistente
+**Enviar:** "En Zapopan"
+**Esperar:**
+- ✅ Respuesta reconociendo la zona
+- ✅ Pregunta sobre presupuesto
+- ✅ Estado actualizado con zona="Zapopan"
+- ✅ NO vuelve a preguntar tipo ni zona
 
-## 📊 COMPARACIÓN CON REPOSITORIO FUNCIONAL
+### Test 4: Búsqueda de Propiedades
+**Enviar:** "Tengo 2 millones"
+**Esperar:**
+- ✅ Claude usa tool `consultar_documentos`
+- ✅ Respuesta con propiedades del Google Doc
+- ✅ Estado actualizado con presupuesto="2 millones"
 
-### whatsapp-agent-v1 (Referencia)
+### Test 5: Agendar Cita
+**Enviar:** "Me interesa, quiero agendar una visita"
+**Esperar:**
+- ✅ Pregunta por fecha/hora preferida
+- ✅ Al confirmar, usa tool `agendar_cita`
+- ✅ Evento creado en Google Calendar
+- ✅ Link de confirmación enviado
 
-- [x] Límite historial: 10 ✅ (Implementado)
-- [x] Validación alternancia: ✅ (Implementado)
-- [x] Primer mensaje validation: ✅ (Implementado)
-- [x] Fusión consecutivos: ✅ (Implementado)
-- [x] Temperature: 0.7 ✅ (Implementado)
-- [x] Logs detallados: ✅ (Implementado)
-
-**Paridad:** 100% ✅
-
----
-
-## 🎯 LISTA DE VERIFICACIÓN PRE-DEPLOY
-
-### Preparación
-
-- [x] Todos los cambios implementados
-- [x] Tests pasando 9/9
-- [x] Sin errores de sintaxis
-- [x] Documentación completa
-- [x] Paridad con repo funcional
-
-### Git & Deploy
-
-- [ ] **Git add:**
-  ```bash
-  git add frontend/src/pages/api/webhook/whatsapp.js
-  git add ANALISIS_CONTEXTO_CORREGIDO.md
-  git add REPORTE_COMPARATIVO_FINAL.md
-  git add RESUMEN_EJECUTIVO.md
-  git add CHECKLIST_VALIDACION.md
-  ```
-
-- [ ] **Git commit:**
-  ```bash
-  git commit -m "fix: Corrección pérdida contexto - límite 10 + validación alternancia
-
-  - Aumenta límite historial de 3 a 10 mensajes (5 turnos)
-  - Implementa validación estricta alternancia roles user/assistant
-  - Agrega fusión automática mensajes consecutivos
-  - Valida primer mensaje debe ser 'user'
-  - Implementa failsafe validación final
-  - Agrega temperature 0.7 explícito
-  - Mejora logs para debugging
-  
-  Tests: 9/9 pasando
-  Basado en: whatsapp-agent-v1 (funcional en prod)
-  Refs: #contexto-perdido"
-  ```
-
-- [ ] **Git push:**
-  ```bash
-  git push origin main
-  ```
-
-### Post-Deploy
-
-- [ ] Verificar logs en Railway:
-  - `📚 Historial: X mensajes cargados`
-  - `💬 X mensajes → Claude`
-  - `✅ Respuesta enviada`
-
-- [ ] Test en producción:
-  - Enviar: "Hola"
-  - Enviar: "Quiero terreno"
-  - Enviar: "En Zapopan"
-  - Enviar: "2 millones"
-  - Verificar: Continuidad sin reseteos
-
-- [ ] Monitorear por 24h:
-  - Sin errores de alternancia
-  - Sin reseteos inesperados
-  - Tasa de éxito > 90%
+### Test 6: Memoria Conversacional (CRÍTICO)
+**Escenario:** Cerrar WhatsApp y volver a abrir después de 10 minutos
+**Enviar:** "¿Qué opciones tenías para mí?"
+**Esperar:**
+- ✅ Claude recuerda: tipo, zona, presupuesto
+- ✅ Claude recuerda propiedades mencionadas
+- ✅ NO vuelve a preguntar datos ya proporcionados
+- ✅ Continúa la conversación de forma natural
 
 ---
 
-## 🎓 CONOCIMIENTO ADQUIRIDO
+## 🔍 Validación de Datos
 
-### Principios Aplicados
+### Verificar en Google Sheets - Mensajes
+Debe haber registros como:
+```
+2024-12-02 10:30:00 | +5215512345678 | inbound | Hola | SMXXXXXXXX
+2024-12-02 10:30:05 | +5215512345678 | outbound | ¡Hola! Soy Claude... | SMXXXXXXXX
+```
 
-- [x] **Stateless API Pattern**
-  - Claude no mantiene memoria
-  - Enviar historial completo cada vez
-  - Fuente: Anthropic Docs ✅
+### Verificar en Google Sheets - Estados
+Debe haber registro como:
+```
++5215512345678 | terreno | Zapopan | 2 millones | consulta | Cliente busca... | 2024-12-02 10:35:00
+```
 
-- [x] **Role Alternation Pattern**
-  - Roles deben alternar user-assistant
-  - Fusionar si hay consecutivos
-  - Fuente: Claude API Requirements ✅
-
-- [x] **Defensive Programming**
-  - Múltiples capas validación
-  - Failsafe siempre
-  - Logs para debugging ✅
-
-- [x] **Test-Driven Fixes**
-  - 9 tests cubren casos críticos
-  - Validan antes y después
-  - Garantizan no regresión ✅
-
-### Referencias Consultadas
-
-- [x] Anthropic API Docs
-- [x] whatsapp-agent-v1 (repo funcional)
-- [x] Model Context Protocol
-- [x] Jest Testing Best Practices
+### Verificar en Google Calendar
+Debe haber evento como:
+```
+Título: Visita terreno Zapopan - Cliente: +5215512345678
+Fecha: 2024-12-05 15:00
+Duración: 60 min
+```
 
 ---
 
-## 📈 MÉTRICAS DE ÉXITO
+## ❌ Troubleshooting
 
-### KPIs Objetivo
+### Problema: Claude no recuerda conversaciones anteriores
+**Causa:** Historial no se está cargando
+**Verificar:**
+1. Logs: Debe aparecer "📚 Cargando X mensajes del historial"
+2. Sheet "Mensajes" tiene los registros
+3. Función `obtenerHistorialConversacion()` se ejecuta
 
-| Métrica | Antes | Objetivo | Después | Estado |
-|---------|-------|----------|---------|--------|
-| Mensajes contexto | 3 | 10 | 10 | ✅ |
-| Turnos memoria | 1.5 | 5 | 5 | ✅ |
-| Reseteos/sesión | 3-5 | 0 | 0* | ✅ |
-| Tests pasando | N/A | 9/9 | 9/9 | ✅ |
-| Tasa éxito | 60% | >90% | 95%* | ✅ |
+### Problema: Estado no se guarda
+**Causa:** Permisos de Google Sheets
+**Solución:**
+1. Verificar que la cuenta de servicio tenga permisos de Editor
+2. Verificar que GOOGLE_SHEET_ID sea correcto
 
-\* *Proyectado basado en tests y repo funcional*
+### Problema: No encuentra propiedades
+**Causa:** Google Docs no accesible
+**Solución:**
+1. Verificar GOOGLE_DOCS_ID
+2. Verificar permisos de lectura
+3. Verificar que el documento tenga contenido
 
----
-
-## ✨ RESUMEN FINAL
-
-### Estado del Proyecto
-
-- ✅ **Problema identificado:** Pérdida de contexto por límite bajo + sin validación
-- ✅ **Causa raíz encontrada:** Comparación con whatsapp-agent-v1
-- ✅ **Solución implementada:** 6 mejoras críticas aplicadas
-- ✅ **Tests validados:** 9/9 pasando en < 1 segundo
-- ✅ **Documentación completa:** 4 documentos técnicos generados
-- ✅ **Sin errores sintaxis:** 0 errores de linting
-- ✅ **Paridad con funcional:** 100% características implementadas
-
-### Confianza en la Solución
-
-**ALTA** ✅
-
-**Razones:**
-1. Basado en código funcional en producción (whatsapp-agent-v1)
-2. Tests automatizados 9/9 pasando
-3. Documentación oficial Anthropic consultada
-4. Múltiples capas de validación
-5. Failsafe implementado
-
-### Próximo Paso
-
-**DEPLOY A PRODUCCIÓN** 🚀
+### Problema: No agenda citas
+**Causa:** Permisos de Google Calendar
+**Solución:**
+1. Verificar GOOGLE_CALENDAR_ID
+2. Verificar permisos de la cuenta de servicio
 
 ---
 
-**Checklist completado por:** GitHub Copilot  
-**Fecha:** 2 de diciembre de 2025  
-**Hora:** Completado  
-**Versión:** v5.2.0  
-**Estado:** ✅ LISTO PARA DEPLOY
+## ✅ Criterios de Éxito
+
+El sistema está funcionando correctamente si:
+1. ✅ Responde a mensajes en WhatsApp
+2. ✅ Guarda todos los mensajes en Google Sheets
+3. ✅ Mantiene estado de conversación persistente
+4. ✅ Recuerda conversaciones anteriores (carga historial)
+5. ✅ No repite preguntas sobre datos ya proporcionados
+6. ✅ Busca propiedades en Google Docs cuando tiene datos completos
+7. ✅ Agenda citas en Google Calendar cuando el cliente confirma
+8. ✅ Maneja múltiples conversaciones simultáneas sin cruzar contextos
+
+---
+
+## 📝 Notas Finales
+
+- Probar con al menos 2 números de teléfono diferentes para verificar que no se cruzan contextos
+- Simular interrupciones (cerrar chat, esperar, volver) para validar persistencia
+- Verificar que los logs en Railway muestren el flujo completo sin errores
+- Documentar cualquier comportamiento inesperado para ajustes futuros
