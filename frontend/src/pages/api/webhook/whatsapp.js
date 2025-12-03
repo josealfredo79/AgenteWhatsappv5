@@ -123,27 +123,21 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  let infoConocida = [];
-  if (estado.tipo_propiedad) infoConocida.push(`Tipo: ${estado.tipo_propiedad}`);
-  if (estado.zona) infoConocida.push(`Zona: ${estado.zona}`);
-  if (estado.presupuesto) infoConocida.push(`Presupuesto: ${estado.presupuesto}`);
+  const tieneInfo = estado.tipo_propiedad && estado.zona && estado.presupuesto;
   
-  let infoFaltante = [];
-  if (!estado.tipo_propiedad) infoFaltante.push('tipo de propiedad');
-  if (!estado.zona) infoFaltante.push('zona');
-  if (!estado.presupuesto) infoFaltante.push('presupuesto');
+  return `Eres un agente inmobiliario profesional.
 
-  return `Eres un asesor inmobiliario profesional que ayuda a clientes a encontrar propiedades.
+CONTEXTO PERSISTENTE:
+${estado.tipo_propiedad ? `- Tipo: ${estado.tipo_propiedad}` : ''}
+${estado.zona ? `- Zona: ${estado.zona}` : ''}
+${estado.presupuesto ? `- Presupuesto: ${estado.presupuesto}` : ''}
 
-CONTEXTO DEL CLIENTE:
-${infoConocida.length > 0 ? infoConocida.join(', ') : 'Conversación iniciando'}
-${infoFaltante.length > 0 ? `Falta: ${infoFaltante.join(', ')}` : 'Información completa'}
+PROTOCOLO:
+1. Si tienes tipo + zona + presupuesto → Llama consultar_documentos(query="${estado.tipo_propiedad} ${estado.zona} ${estado.presupuesto}")
+2. Si falta datos → Pregunta SOLO el primero que falte
+3. Respuestas breves y profesionales
 
-INSTRUCCIONES:
-1. Si ya tienes tipo + zona + presupuesto → Usa consultar_documentos inmediatamente
-2. Si falta información → Pregunta solo UNO de los datos que faltan
-3. Mantén respuestas breves y profesionales
-4. Al final incluye: [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]`;
+ESTADO_ACTUAL: [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
