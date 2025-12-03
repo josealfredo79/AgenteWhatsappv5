@@ -446,6 +446,35 @@ export default async function handler(req, res) {
       await guardarEstadoConversacion(estadoActualizado);
     }
 
+    // 🚀 BYPASS DE CLAUDE: Si ya tenemos los 3 datos, usar herramienta directo
+    if (estadoActualizado.tipo_propiedad && estadoActualizado.zona && estadoActualizado.presupuesto) {
+      console.log('🚀 BYPASS: Tengo los 3 datos, llamando consultar_documentos DIRECTO');
+      
+      const query = `${estadoActualizado.tipo_propiedad} ${estadoActualizado.zona} ${estadoActualizado.presupuesto}`;
+      const resultadoDocs = await consultarDocumentos({ query });
+      
+      let respuestaFinal = '';
+      if (resultadoDocs.success && resultadoDocs.content) {
+        // Extraer primeras 3 propiedades del documento
+        const lineas = resultadoDocs.content.split('\n').filter(l => l.trim());
+        const propiedades = lineas.slice(0, 6).join('\n');
+        respuestaFinal = `Encontré estas opciones en ${estadoActualizado.zona}:\n\n${propiedades}\n\n¿Te interesa alguna? 🏡`;
+      } else {
+        respuestaFinal = `Busqué ${estadoActualizado.tipo_propiedad} en ${estadoActualizado.zona} hasta ${estadoActualizado.presupuesto}, pero no encontré opciones en este momento. ¿Quieres cambiar algún criterio?`;
+      }
+      
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const twilioMsg = await client.messages.create({
+        from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
+        to: From,
+        body: respuestaFinal
+      });
+      
+      await guardarMensajeEnSheet({ telefono, direccion: 'outbound', mensaje: respuestaFinal, messageId: twilioMsg.sid });
+      console.log('✅ Respuesta BYPASS enviada');
+      return res.status(200).json({ success: true, bypass: true });
+    }
+
     const historial = await obtenerHistorialConversacion(telefono, 10);
     console.log(`📚 Historial: ${historial.length} mensajes cargados`);
     
