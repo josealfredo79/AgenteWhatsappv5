@@ -123,48 +123,27 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  // Construir sección de información ya conocida
   let infoConocida = [];
-  if (estado.tipo_propiedad) infoConocida.push(`✅ Tipo de propiedad: ${estado.tipo_propiedad}`);
-  if (estado.zona) infoConocida.push(`✅ Zona: ${estado.zona}`);
-  if (estado.presupuesto) infoConocida.push(`✅ Presupuesto: ${estado.presupuesto}`);
+  if (estado.tipo_propiedad) infoConocida.push(`Tipo: ${estado.tipo_propiedad}`);
+  if (estado.zona) infoConocida.push(`Zona: ${estado.zona}`);
+  if (estado.presupuesto) infoConocida.push(`Presupuesto: ${estado.presupuesto}`);
   
   let infoFaltante = [];
-  if (!estado.tipo_propiedad) infoFaltante.push('❌ Tipo de propiedad (casa/terreno/departamento)');
-  if (!estado.zona) infoFaltante.push('❌ Zona o ciudad');
-  if (!estado.presupuesto) infoFaltante.push('❌ Presupuesto');
+  if (!estado.tipo_propiedad) infoFaltante.push('tipo de propiedad');
+  if (!estado.zona) infoFaltante.push('zona');
+  if (!estado.presupuesto) infoFaltante.push('presupuesto');
 
-  return `Eres un asesor inmobiliario profesional en WhatsApp.
+  return `Eres un asesor inmobiliario profesional que ayuda a clientes a encontrar propiedades.
 
-📋 INFORMACIÓN QUE YA TIENES DEL CLIENTE:
-${infoConocida.length > 0 ? infoConocida.join('\n') : '(Ninguna todavía)'}
+CONTEXTO DEL CLIENTE:
+${infoConocida.length > 0 ? infoConocida.join(', ') : 'Conversación iniciando'}
+${infoFaltante.length > 0 ? `Falta: ${infoFaltante.join(', ')}` : 'Información completa'}
 
-📝 INFORMACIÓN QUE AÚN FALTA:
-${infoFaltante.length > 0 ? infoFaltante.join('\n') : '(¡Ya tienes todo!)'}
-
-🎯 INSTRUCCIONES CRÍTICAS:
-
-1. NUNCA vuelvas a preguntar información marcada con ✅ (excepto si el cliente dice "cambio de opinión" o "prefiero otro")
-   
-2. Si ya tienes los 3 datos → Usa INMEDIATAMENTE consultar_documentos → NO respondas con texto → USA LA HERRAMIENTA DIRECTO
-   
-3. Si te falta información (marcada con ❌) → Pregunta SOLO UNO de los datos que faltan
-
-4. Respuestas cortas: Máximo 2 líneas de texto
-
-5. Al final de tu respuesta incluye:
-   [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]
-
-EJEMPLO INCORRECTO:
-Cliente: "terreno en Zapopan de 2 millones"
-[Tienes: ✅tipo ✅zona ✅presupuesto]
-Tú: "¿Qué tipo buscas?" ← ESTO ESTA MAL
-
-EJEMPLO CORRECTO:
-Cliente: "terreno en Zapopan de 2 millones"  
-[Tienes: ✅tipo ✅zona ✅presupuesto]
-Tú: [USAS consultar_documentos con query="terrenos Zapopan 2 millones"]
-Tú: "Encontré estas opciones: 🏡 Terreno 250m²..."`;
+INSTRUCCIONES:
+1. Si ya tienes tipo + zona + presupuesto → Usa consultar_documentos inmediatamente
+2. Si falta información → Pregunta solo UNO de los datos que faltan
+3. Mantén respuestas breves y profesionales
+4. Al final incluye: [ESTADO]{"tipo":"${estado.tipo_propiedad || ''}","zona":"${estado.zona || ''}","presupuesto":"${estado.presupuesto || ''}"}[/ESTADO]`;
 }
 
 function extraerEstadoDeRespuesta(respuesta, estadoActual) {
@@ -290,7 +269,7 @@ function limpiarRespuesta(respuesta) {
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'DEBES usar esta herramienta INMEDIATAMENTE cuando tengas los 3 datos: tipo + zona + presupuesto. NO preguntes nada más, USA LA HERRAMIENTA.',
+    description: 'Busca propiedades disponibles en el catálogo. Usa esta herramienta cuando tengas: tipo de propiedad + zona + presupuesto del cliente.',
     input_schema: {
       type: 'object',
       properties: {
@@ -301,7 +280,7 @@ const tools = [
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda visita cuando el cliente CONFIRME interés en una propiedad específica.',
+    description: 'Agenda una cita para visitar una propiedad cuando el cliente confirme su interés.',
     input_schema: {
       type: 'object',
       properties: {
@@ -444,35 +423,6 @@ export default async function handler(req, res) {
         estadoActualizado.presupuesto !== estado.presupuesto) {
       console.log('💾 Guardando estado actualizado ANTES de enviar a Claude...');
       await guardarEstadoConversacion(estadoActualizado);
-    }
-
-    // 🚀 BYPASS DE CLAUDE: Si ya tenemos los 3 datos, usar herramienta directo
-    if (estadoActualizado.tipo_propiedad && estadoActualizado.zona && estadoActualizado.presupuesto) {
-      console.log('🚀 BYPASS: Tengo los 3 datos, llamando consultar_documentos DIRECTO');
-      
-      const query = `${estadoActualizado.tipo_propiedad} ${estadoActualizado.zona} ${estadoActualizado.presupuesto}`;
-      const resultadoDocs = await consultarDocumentos({ query });
-      
-      let respuestaFinal = '';
-      if (resultadoDocs.success && resultadoDocs.content) {
-        // Extraer primeras 3 propiedades del documento
-        const lineas = resultadoDocs.content.split('\n').filter(l => l.trim());
-        const propiedades = lineas.slice(0, 6).join('\n');
-        respuestaFinal = `Encontré estas opciones en ${estadoActualizado.zona}:\n\n${propiedades}\n\n¿Te interesa alguna? 🏡`;
-      } else {
-        respuestaFinal = `Busqué ${estadoActualizado.tipo_propiedad} en ${estadoActualizado.zona} hasta ${estadoActualizado.presupuesto}, pero no encontré opciones en este momento. ¿Quieres cambiar algún criterio?`;
-      }
-      
-      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-      const twilioMsg = await client.messages.create({
-        from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
-        to: From,
-        body: respuestaFinal
-      });
-      
-      await guardarMensajeEnSheet({ telefono, direccion: 'outbound', mensaje: respuestaFinal, messageId: twilioMsg.sid });
-      console.log('✅ Respuesta BYPASS enviada');
-      return res.status(200).json({ success: true, bypass: true });
     }
 
     const historial = await obtenerHistorialConversacion(telefono, 10);
