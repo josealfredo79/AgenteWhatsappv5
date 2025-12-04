@@ -352,6 +352,44 @@ function detectarDatosEnMensaje(mensaje) {
     }
   }
 
+  // DETECTAR INTENCIÓN DE AGENDAR
+  const quiereAgendar = 
+    /^(si|sí|claro|por favor|ok|va|dale|okay|perfecto|por supuesto|desde luego)[\s.,!?]*$/i.test(mensaje.trim()) ||
+    /\b(quiero|quisiera|me gustaria|me gustaría|podemos|podriamos|podríamos)\s+(agendar|visitar|ver|conocer|ir)\b/i.test(mensajeLower) ||
+    /\b(si|sí),?\s*(por favor|quiero|me interesa)/i.test(mensajeLower) ||
+    /\bagendame\b|\bagenda\b|\bvisita\b/i.test(mensajeLower);
+  
+  if (quiereAgendar) {
+    datos.quiere_agendar = true;
+    log('📅', 'Detectado: cliente quiere agendar');
+  }
+
+  // DETECTAR FECHA/HORA proporcionada
+  const tieneFecha = 
+    /\b(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/i.test(mensajeLower) ||
+    /\b(mañana|pasado\s*mañana|hoy|esta\s*semana|proxima\s*semana|próxima\s*semana)\b/i.test(mensajeLower) ||
+    /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower) ||
+    /\b\d{1,2}\s*(de|\/|-)\s*\d{1,2}\b/i.test(mensajeLower) ||
+    /\b\d{1,2}\s*(de|del)\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower);
+  
+  const tieneHora = 
+    /\b\d{1,2}:\d{2}\b/.test(mensajeLower) ||
+    /\b\d{1,2}\s*(am|pm|hrs|horas|de la mañana|de la tarde|de la noche)\b/i.test(mensajeLower) ||
+    /\b(a las|alas)\s*\d{1,2}\b/i.test(mensajeLower);
+  
+  if (tieneFecha || tieneHora) {
+    datos.tiene_fecha = true;
+    log('🗓️', 'Detectado: cliente proporcionó fecha/hora');
+  }
+
+  // DETECTAR INTERÉS EN OPCIÓN ESPECÍFICA
+  if (/\b(el|la|ese|esa|este|esta)\s*(primero|primer|1|uno|lote|terreno|casa|opcion|opción)\b/i.test(mensajeLower) ||
+      /\b(me interesa|me gusta|quiero)\s*(el|la|ese|esa)?\s*(primero|1|uno|lote|terreno|opcion)\b/i.test(mensajeLower) ||
+      /^(el\s*)?(1|2|3|primero|segundo|tercero|uno|dos|tres)[\s.,]*$/i.test(mensaje.trim())) {
+    datos.mostro_interes = true;
+    log('👆', 'Detectado: cliente mostró interés en opción específica');
+  }
+
   return datos;
 }
 
@@ -359,12 +397,48 @@ function detectarDatosEnMensaje(mensaje) {
 // ACTUALIZAR ESTADO CON NUEVOS DATOS DETECTADOS
 // ============================================================================
 function actualizarEstadoConDatos(estadoActual, datosNuevos) {
-  return {
+  let nuevaEtapa = estadoActual.etapa;
+  
+  // Determinar nueva etapa basado en el flujo de conversación
+  const tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
+  const zonaFinal = datosNuevos.zona || estadoActual.zona;
+  const presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
+  const tieneTodosDatos = tipoFinal && zonaFinal && presupuestoFinal;
+  
+  // Lógica de etapas (en orden de prioridad)
+  if (datosNuevos.tiene_fecha) {
+    // Cliente dio fecha → listo para agendar
+    nuevaEtapa = 'esperando_fecha';
+    log('📊', 'Etapa actualizada: esperando_fecha');
+  } else if (datosNuevos.quiere_agendar && estadoActual.etapa !== 'esperando_fecha') {
+    // Cliente quiere agendar pero no dio fecha → pedir fecha
+    nuevaEtapa = 'agendar';
+    log('📊', 'Etapa actualizada: agendar');
+  } else if (datosNuevos.mostro_interes) {
+    // Cliente mostró interés en una opción
+    nuevaEtapa = 'interesado';
+    log('📊', 'Etapa actualizada: interesado');
+  } else if (tieneTodosDatos && estadoActual.etapa === 'inicial') {
+    // Tiene todos los datos, puede buscar
+    nuevaEtapa = 'busqueda';
+    log('📊', 'Etapa actualizada: busqueda');
+  }
+  
+  const estadoNuevo = {
     ...estadoActual,
-    tipo_propiedad: datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad,
-    zona: datosNuevos.zona || estadoActual.zona,
-    presupuesto: datosNuevos.presupuesto || estadoActual.presupuesto
+    tipo_propiedad: tipoFinal,
+    zona: zonaFinal,
+    presupuesto: presupuestoFinal,
+    etapa: nuevaEtapa
   };
+  
+  log('📋', 'Estado actualizado', { 
+    antes: estadoActual.etapa, 
+    despues: nuevaEtapa,
+    datos: { tipo: tipoFinal, zona: zonaFinal, presupuesto: presupuestoFinal }
+  });
+  
+  return estadoNuevo;
 }
 
 // ============================================================================
@@ -437,73 +511,130 @@ async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }
 }
 
 // ============================================================================
-// SYSTEM PROMPT PROFESIONAL (basado en documentación de Anthropic)
+// SYSTEM PROMPT PROFESIONAL COMPLETO
 // ============================================================================
 function construirSystemPrompt(estado) {
   const tipo = estado.tipo_propiedad || null;
   const zona = estado.zona || null;
   const presupuesto = estado.presupuesto || null;
+  const etapa = estado.etapa || 'inicial';
   
-  // Construir contexto del cliente
-  let clienteContext = '';
-  if (tipo || zona || presupuesto) {
-    clienteContext = `
-<cliente_datos_confirmados>
-${tipo ? `- Tipo de propiedad: ${tipo}` : '- Tipo de propiedad: [PENDIENTE]'}
-${zona ? `- Zona: ${zona}` : '- Zona: [PENDIENTE]'}
-${presupuesto ? `- Presupuesto: ${presupuesto}` : '- Presupuesto: [PENDIENTE]'}
-</cliente_datos_confirmados>`;
+  const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
+  const fechaHoy = ahora.toFormat("EEEE d 'de' MMMM 'de' yyyy", { locale: 'es' });
+  const horaActual = ahora.toFormat('HH:mm');
+
+  // Determinar qué datos faltan
+  const datosFaltantes = [];
+  if (!tipo) datosFaltantes.push('tipo de propiedad');
+  if (!zona) datosFaltantes.push('zona');
+  if (!presupuesto) datosFaltantes.push('presupuesto');
+  
+  // Determinar la siguiente acción según el estado
+  let instruccionEspecifica = '';
+  
+  if (datosFaltantes.length === 3) {
+    instruccionEspecifica = `
+<accion_requerida>
+Este es un CLIENTE NUEVO. Tu única tarea ahora:
+1. Saluda brevemente (máximo 1 línea)
+2. Pregunta: "¿Qué tipo de propiedad te interesa? 🏠"
+NO des información adicional hasta saber qué busca.
+</accion_requerida>`;
+  } else if (datosFaltantes.length > 0) {
+    instruccionEspecifica = `
+<accion_requerida>
+Falta información. Pregunta SOLO por: ${datosFaltantes[0]}
+NO repitas datos que ya tienes. NO des información de propiedades aún.
+</accion_requerida>`;
+  } else if (etapa === 'inicial' || etapa === 'busqueda') {
+    instruccionEspecifica = `
+<accion_requerida>
+Ya tienes TODOS los datos (tipo: ${tipo}, zona: ${zona}, presupuesto: ${presupuesto}).
+USA la herramienta "consultar_documentos" AHORA para buscar opciones.
+Muestra máximo 2-3 opciones relevantes. Pregunta cuál le interesa.
+</accion_requerida>`;
+  } else if (etapa === 'interesado') {
+    instruccionEspecifica = `
+<accion_requerida>
+El cliente ya mostró interés en una propiedad específica.
+Si pregunta más detalles → dáselos brevemente.
+Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
+NO vuelvas a listar todas las opciones.
+</accion_requerida>`;
+  } else if (etapa === 'agendar') {
+    instruccionEspecifica = `
+<accion_requerida>
+El cliente QUIERE AGENDAR. Tu ÚNICA respuesta debe ser:
+"¡Perfecto! 📅 ¿Qué día y hora te funcionaría para la visita?"
+NO des más información. NO repitas detalles. SOLO pregunta la fecha.
+</accion_requerida>`;
+  } else if (etapa === 'esperando_fecha') {
+    instruccionEspecifica = `
+<accion_requerida>
+Estás esperando que el cliente dé fecha/hora.
+Cuando la dé, USA "agendar_cita" inmediatamente.
+Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
+"pasado mañana" = ${ahora.plus({ days: 2 }).toFormat('yyyy-MM-dd')}
+</accion_requerida>`;
   }
 
-  // Determinar siguiente acción
-  let siguienteAccion = '';
-  if (!tipo && !zona && !presupuesto) {
-    siguienteAccion = 'Este es un cliente nuevo. Saluda brevemente y pregunta qué tipo de propiedad busca.';
-  } else if (!tipo) {
-    siguienteAccion = 'Pregunta qué tipo de propiedad busca (casa, terreno, departamento, etc.)';
-  } else if (!zona) {
-    siguienteAccion = 'Pregunta en qué zona o ciudad le gustaría encontrar la propiedad.';
-  } else if (!presupuesto) {
-    siguienteAccion = 'Pregunta cuál es su presupuesto aproximado.';
-  } else {
-    siguienteAccion = 'Ya tienes todos los datos. USA LA HERRAMIENTA consultar_documentos para buscar propiedades disponibles.';
-  }
+  return `Eres Ana, asesora inmobiliaria profesional de Terrenos Zapopan.
+Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 
-  return `Eres Ana, una asesora inmobiliaria profesional y amable.
+<perfil>
+- Nombre: Ana
+- Rol: Asesora inmobiliaria
+- Estilo: Profesional, amable, concisa
+- Objetivo: Ayudar al cliente a encontrar su propiedad ideal y agendar visitas
+</perfil>
 
-<tu_objetivo>
-Ayudar al cliente a encontrar la propiedad ideal recopilando 3 datos esenciales:
-1. Tipo de propiedad (casa, terreno, departamento, local)
-2. Zona o ciudad de interés
-3. Presupuesto aproximado
-</tu_objetivo>
+<datos_del_cliente>
+- Teléfono: ${estado.telefono}
+- Tipo de propiedad: ${tipo || '❌ Pendiente'}
+- Zona de interés: ${zona || '❌ Pendiente'}
+- Presupuesto: ${presupuesto || '❌ Pendiente'}
+- Etapa actual: ${etapa}
+</datos_del_cliente>
 
-${clienteContext}
+${instruccionEspecifica}
 
-<siguiente_accion>
-${siguienteAccion}
-</siguiente_accion>
+<reglas_de_oro>
+1. NUNCA repitas información que ya diste en mensajes anteriores
+2. NUNCA preguntes por datos que ya tienes confirmados arriba
+3. NUNCA inventes fechas para agendar - espera que el cliente las dé
+4. Respuestas CORTAS: máximo 4 líneas
+5. Usa 1-2 emojis por mensaje (no más)
+6. Cuando el cliente dice "sí" a algo, AVANZA al siguiente paso
+7. Si el cliente cambia de tema o dice algo no relacionado, redirige amablemente
+</reglas_de_oro>
 
-<reglas_criticas>
-1. NUNCA preguntes por un dato que ya está confirmado arriba
-2. Si el cliente ya proporcionó un dato en este mensaje, NO lo vuelvas a preguntar
-3. Respuestas cortas: máximo 2-3 oraciones
-4. Usa 1-2 emojis por mensaje
-5. Si tienes los 3 datos, DEBES usar la herramienta consultar_documentos
-6. CAMBIOS DE OPINIÓN: Si el cliente dice "mejor quiero casa" o "cambié, prefiero terreno", 
-   acepta el cambio naturalmente con algo como "¡Perfecto! Ahora buscaremos [nuevo tipo]..."
-   El sistema ya actualizó el estado, solo confirma el cambio amablemente.
-7. AGENDAMIENTO: Cuando el cliente quiera agendar una visita:
-   - PRIMERO pregunta: "¿Qué día y hora te funcionaría para la visita?"
-   - SOLO usa agendar_cita cuando el cliente haya dado fecha y hora específicas
-   - NUNCA inventes fechas - espera a que el cliente las proporcione
-   - Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-</reglas_criticas>
+<manejo_de_respuestas>
+- "Hola" / Saludo → Saluda y pregunta qué tipo de propiedad busca
+- Menciona tipo (casa/terreno/depto) → Guárdalo y pregunta zona
+- Menciona zona → Guárdalo y pregunta presupuesto  
+- Menciona presupuesto → Guárdalo y USA consultar_documentos
+- "Me interesa el X" → Da detalles breves y pregunta si quiere agendar
+- "Sí" / "Sí por favor" (para agendar) → Pregunta fecha y hora
+- Da fecha/hora → USA agendar_cita y envía el link
+- "No" / "Gracias" → Despídete cordialmente, ofrece ayuda futura
+- Pregunta fuera de tema → "Con gusto te ayudo con eso después. ¿Continuamos con tu búsqueda de propiedad?"
+</manejo_de_respuestas>
+
+<conversion_fechas>
+Hoy es ${fechaHoy}. Si el cliente dice:
+- "mañana" → ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
+- "pasado mañana" → ${ahora.plus({ days: 2 }).toFormat('yyyy-MM-dd')}
+- "el viernes" → Calcula el próximo viernes
+- "la próxima semana" → ${ahora.plus({ weeks: 1 }).toFormat('yyyy-MM-dd')}
+- "el día X" → ${ahora.year}-${String(ahora.month).padStart(2, '0')}-XX (del mes actual o siguiente)
+Hora por defecto si no especifica: 10:00
+</conversion_fechas>
 
 <formato_respuesta>
-- Sé conciso y directo
-- No hagas listas largas de opciones
-- No repitas información que el cliente ya dio
+- Sé directo y conciso
+- No hagas introducciones largas
+- No repitas lo que el cliente ya sabe
+- Termina con UNA pregunta o acción clara
 </formato_respuesta>`;
 }
 
@@ -818,8 +949,28 @@ export default async function handler(req, res) {
 
     log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
-    // 10. Enviar por WhatsApp
-    log('📤', 'PASO 7: Enviando respuesta por WhatsApp...');
+    // 10. Detectar si hubo cita agendada y actualizar estado
+    const huboToolUse = response.content.some(b => b.type === 'tool_use' && b.name === 'agendar_cita');
+    if (huboToolUse) {
+      estadoActualizado.etapa = 'cita_agendada';
+      estadoActualizado.ultima_interaccion = new Date().toISOString();
+      await guardarEstadoConversacion(estadoActualizado);
+      log('📅', 'Estado actualizado: cita_agendada');
+    }
+    
+    // 11. Detectar cambio de etapa basado en la respuesta
+    const respuestaLower = respuestaTexto.toLowerCase();
+    if (respuestaLower.includes('qué día') || respuestaLower.includes('qué fecha') || respuestaLower.includes('qué hora')) {
+      if (estadoActualizado.etapa !== 'esperando_fecha') {
+        estadoActualizado.etapa = 'esperando_fecha';
+        estadoActualizado.ultima_interaccion = new Date().toISOString();
+        await guardarEstadoConversacion(estadoActualizado);
+        log('📅', 'Estado actualizado: esperando_fecha (detectado en respuesta)');
+      }
+    }
+
+    // 12. Enviar por WhatsApp
+    log('📤', 'PASO 8: Enviando respuesta por WhatsApp...');
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
@@ -827,7 +978,7 @@ export default async function handler(req, res) {
       body: respuestaTexto
     });
 
-    // 11. Guardar respuesta en historial
+    // 13. Guardar respuesta en historial
     await guardarMensajeEnSheet({ 
       telefono, 
       direccion: 'outbound', 
