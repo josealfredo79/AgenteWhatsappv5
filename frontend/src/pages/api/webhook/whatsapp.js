@@ -77,9 +77,17 @@ async function obtenerEstadoConversacion(telefono) {
     const rows = response.data.values || [];
     log('📊', `Total filas en Estados: ${rows.length}`);
     
+    // DEBUG: Mostrar los últimos 5 teléfonos en la hoja
+    const ultimos5 = rows.slice(-5).map(r => r[0]);
+    log('🔍', `Últimos 5 teléfonos en hoja: ${JSON.stringify(ultimos5)}`);
+    log('🔍', `Buscando exactamente: "${telefonoNormalizado}"`);
+    
     // Buscar con teléfono normalizado
     const estadoRow = rows.find(row => {
       const telEnSheet = normalizarTelefono(row[0] || '');
+      if (telEnSheet.includes(telefonoNormalizado.slice(-10)) || telefonoNormalizado.includes(telEnSheet.slice(-10))) {
+        log('🔎', `Comparando: "${telEnSheet}" vs "${telefonoNormalizado}"`);
+      }
       return telEnSheet === telefonoNormalizado;
     });
 
