@@ -187,8 +187,14 @@ async function guardarEstadoConversacion(estado) {
 function detectarDatosEnMensaje(mensaje) {
   const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let datos = {};
+  
+  // Detectar si es un cambio de opinión (para logging)
+  const esCambioOpinion = /mejor|cambio|cambie|prefiero|en realidad|ya no|ahora quiero|pensandolo bien/.test(mensajeLower);
+  if (esCambioOpinion) {
+    log('🔄', 'Detectado posible cambio de opinión');
+  }
 
-  // TIPO DE PROPIEDAD
+  // TIPO DE PROPIEDAD (siempre sobrescribe si detecta algo nuevo)
   if (/\b(terreno|terrenos|lote|lotes)\b/.test(mensajeLower)) {
     datos.tipo_propiedad = 'Terreno';
   } else if (/\b(casa|casas|residencia)\b/.test(mensajeLower)) {
@@ -372,7 +378,9 @@ ${siguienteAccion}
 3. Respuestas cortas: máximo 2-3 oraciones
 4. Usa 1-2 emojis por mensaje
 5. Si tienes los 3 datos, DEBES usar la herramienta consultar_documentos
-6. Si el cliente cambia de opinión, acepta el cambio naturalmente
+6. CAMBIOS DE OPINIÓN: Si el cliente dice "mejor quiero casa" o "cambié, prefiero terreno", 
+   acepta el cambio naturalmente con algo como "¡Perfecto! Ahora buscaremos [nuevo tipo]..."
+   El sistema ya actualizó el estado, solo confirma el cambio amablemente.
 </reglas_criticas>
 
 <formato_respuesta>
