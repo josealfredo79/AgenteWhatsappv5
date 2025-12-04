@@ -12,7 +12,18 @@ const CONFIG = {
   MODEL: 'claude-3-5-haiku-20241022',
   MAX_TOKENS: 1024,
   HISTORIAL_LIMITE: 15,
-  TIMEZONE: 'America/Mexico_City'
+  TIMEZONE: 'America/Mexico_City',
+  // Tiempo en horas después del cual se considera una nueva sesión
+  SESION_TIMEOUT_HORAS: 24
+};
+
+// ============================================================================
+// COMANDOS ESPECIALES DEL SISTEMA
+// ============================================================================
+const COMANDOS = {
+  REINICIAR: /^(reiniciar|reset|nuevo|nueva consulta|empezar de nuevo|borrar|limpiar)$/i,
+  AYUDA: /^(ayuda|help|comandos|menu|menú|\?)$/i,
+  ESTADO: /^(estado|status|mi estado|mis datos)$/i
 };
 
 // ============================================================================
@@ -202,6 +213,82 @@ async function guardarEstadoConversacion(estado) {
     log('❌', 'Error al guardar estado', { error: error.message });
     return { success: false, error: error.message };
   }
+}
+
+// ============================================================================
+// RESETEAR ESTADO DEL CLIENTE
+// ============================================================================
+async function resetearEstadoCliente(telefono) {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+  log('🗑️', `Reseteando estado para: ${telefonoNormalizado}`);
+  
+  const estadoVacio = {
+    telefono: telefonoNormalizado,
+    tipo_propiedad: '',
+    zona: '',
+    presupuesto: '',
+    etapa: 'inicial',
+    resumen: '',
+    ultima_actualizacion: ''
+  };
+  
+  await guardarEstadoConversacion(estadoVacio);
+  return estadoVacio;
+}
+
+// ============================================================================
+// VERIFICAR SI LA SESIÓN EXPIRÓ (para auto-reset)
+// ============================================================================
+function sesionExpirada(ultimaActualizacion) {
+  if (!ultimaActualizacion) return true;
+  
+  try {
+    const ultima = DateTime.fromFormat(ultimaActualizacion, 'yyyy-MM-dd HH:mm:ss', { zone: CONFIG.TIMEZONE });
+    const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
+    const horasTranscurridas = ahora.diff(ultima, 'hours').hours;
+    
+    return horasTranscurridas > CONFIG.SESION_TIMEOUT_HORAS;
+  } catch {
+    return true;
+  }
+}
+
+// ============================================================================
+// PROCESAR COMANDOS ESPECIALES
+// ============================================================================
+async function procesarComandoEspecial(mensaje, telefono, estado) {
+  const mensajeLimpio = mensaje.trim();
+  
+  // Comando: REINICIAR
+  if (COMANDOS.REINICIAR.test(mensajeLimpio)) {
+    await resetearEstadoCliente(telefono);
+    return {
+      esComando: true,
+      respuesta: `🔄 ¡Listo! He reiniciado tu búsqueda.\n\n¡Hola! 👋 Soy Ana, tu asesora inmobiliaria. ¿Qué tipo de propiedad estás buscando hoy?\n\n• 🏠 Casa\n• 🏢 Departamento\n• 🌳 Terreno\n• 🏪 Local comercial`
+    };
+  }
+  
+  // Comando: AYUDA
+  if (COMANDOS.AYUDA.test(mensajeLimpio)) {
+    return {
+      esComando: true,
+      respuesta: `📋 *Comandos disponibles:*\n\n• *reiniciar* - Empezar una nueva búsqueda\n• *estado* - Ver tus datos guardados\n• *ayuda* - Ver este menú\n\n💡 También puedes simplemente decirme qué tipo de propiedad buscas, en qué zona y tu presupuesto.`
+    };
+  }
+  
+  // Comando: ESTADO
+  if (COMANDOS.ESTADO.test(mensajeLimpio)) {
+    const tipo = estado.tipo_propiedad || '❌ No definido';
+    const zona = estado.zona || '❌ No definida';
+    const presupuesto = estado.presupuesto || '❌ No definido';
+    
+    return {
+      esComando: true,
+      respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
+    };
+  }
+  
+  return { esComando: false };
 }
 
 // ============================================================================
@@ -608,40 +695,72 @@ export default async function handler(req, res) {
 
     // 1. Obtener estado actual
     log('📖', 'PASO 1: Obteniendo estado del cliente...');
-    const estadoActual = await obtenerEstadoConversacion(telefono);
+    let estadoActual = await obtenerEstadoConversacion(telefono);
 
-    // 2. Detectar datos en el mensaje actual
-    log('🔍', 'PASO 2: Detectando datos en mensaje...');
+    // 2. Verificar si la sesión expiró (auto-reset después de 24 horas)
+    if (sesionExpirada(estadoActual.ultima_actualizacion) && estadoActual.tipo_propiedad) {
+      log('⏰', 'Sesión expirada, reseteando estado automáticamente');
+      estadoActual = await resetearEstadoCliente(telefono);
+    }
+
+    // 3. Procesar comandos especiales
+    log('🎯', 'PASO 2: Verificando comandos especiales...');
+    const comandoResult = await procesarComandoEspecial(Body, telefono, estadoActual);
+    
+    if (comandoResult.esComando) {
+      log('⚡', 'Comando especial detectado, respondiendo directamente');
+      
+      // Enviar respuesta del comando
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const twilioMsg = await client.messages.create({
+        from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
+        to: From,
+        body: comandoResult.respuesta
+      });
+      
+      await guardarMensajeEnSheet({ 
+        telefono, 
+        direccion: 'outbound', 
+        mensaje: comandoResult.respuesta, 
+        messageId: twilioMsg.sid 
+      });
+      
+      log('✅', 'Comando procesado exitosamente');
+      return res.status(200).json({ success: true, comando: true });
+    }
+
+    // 4. Detectar datos en el mensaje actual
+    log('🔍', 'PASO 3: Detectando datos en mensaje...');
     const datosDetectados = detectarDatosEnMensaje(Body);
     log('🎯', 'Datos detectados', datosDetectados);
 
-    // 3. Actualizar estado con datos detectados
+    // 5. Actualizar estado con datos detectados
     const estadoActualizado = actualizarEstadoConDatos(estadoActual, datosDetectados);
     
     // Si hay cambios, guardar inmediatamente
     if (Object.keys(datosDetectados).length > 0) {
-      log('💾', 'PASO 3: Guardando estado actualizado...');
+      log('💾', 'PASO 4: Guardando estado actualizado...');
       await guardarEstadoConversacion(estadoActualizado);
     }
     
     log('📋', 'Estado final', estadoActualizado);
 
-    // 4. Obtener historial
-    log('📚', 'PASO 4: Obteniendo historial...');
+    // 6. Obtener historial
+    log('📚', 'PASO 5: Obteniendo historial...');
     const historial = await obtenerHistorialConversacion(telefono);
 
-    // 5. Construir mensajes para Claude
-    log('🔧', 'PASO 5: Construyendo mensajes para Claude...');
+    // 7. Construir mensajes para Claude
+    log('🔧', 'PASO 6: Construyendo mensajes para Claude...');
     const messages = construirMensajesParaClaude(historial, Body, estadoActualizado);
     log('📝', `Mensajes construidos: ${messages.length}`);
     log('📝', 'Roles: ' + messages.map(m => m.role).join(' → '));
 
-    // 6. Construir system prompt
+    // 8. Construir system prompt
     const systemPrompt = construirSystemPrompt(estadoActualizado);
     log('📋', 'System prompt construido');
 
-    // 7. Llamar a Claude
-    log('🤖', 'PASO 6: Llamando a Claude...');
+    // 9. Llamar a Claude
+    log('🤖', 'PASO 7: Llamando a Claude...');
     let response = await anthropic.messages.create({
       model: CONFIG.MODEL,
       max_tokens: CONFIG.MAX_TOKENS,
@@ -650,7 +769,7 @@ export default async function handler(req, res) {
       messages
     });
 
-    // 8. Procesar tool calls si las hay
+    // 10. Procesar tool calls si las hay
     let iteraciones = 0;
     const MAX_ITERACIONES = 3;
     
