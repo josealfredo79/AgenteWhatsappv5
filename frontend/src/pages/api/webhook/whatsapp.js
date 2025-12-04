@@ -53,8 +53,22 @@ function getGoogleAuth(scopes) {
 // NORMALIZAR TELÉFONO (para consistencia en búsquedas)
 // ============================================================================
 function normalizarTelefono(telefono) {
-  // Remover 'whatsapp:' si existe y cualquier espacio
-  return telefono.replace('whatsapp:', '').replace(/\s/g, '').trim();
+  // Remover 'whatsapp:' si existe, espacios, y cualquier caracter no numérico excepto +
+  let normalizado = telefono
+    .replace('whatsapp:', '')
+    .replace(/\s/g, '')
+    .trim();
+  
+  // Extraer solo los últimos 10 dígitos para comparación más flexible
+  return normalizado;
+}
+
+// Función para comparar teléfonos de forma flexible
+function telefonosCoinciden(tel1, tel2) {
+  // Extraer solo dígitos
+  const digitos1 = tel1.replace(/\D/g, '').slice(-10);
+  const digitos2 = tel2.replace(/\D/g, '').slice(-10);
+  return digitos1 === digitos2;
 }
 
 // ============================================================================
@@ -82,13 +96,14 @@ async function obtenerEstadoConversacion(telefono) {
     log('🔍', `Últimos 5 teléfonos en hoja: ${JSON.stringify(ultimos5)}`);
     log('🔍', `Buscando exactamente: "${telefonoNormalizado}"`);
     
-    // Buscar con teléfono normalizado
+    // Buscar con teléfono normalizado (comparación flexible por últimos 10 dígitos)
     const estadoRow = rows.find(row => {
-      const telEnSheet = normalizarTelefono(row[0] || '');
-      if (telEnSheet.includes(telefonoNormalizado.slice(-10)) || telefonoNormalizado.includes(telEnSheet.slice(-10))) {
-        log('🔎', `Comparando: "${telEnSheet}" vs "${telefonoNormalizado}"`);
+      const telEnSheet = row[0] || '';
+      const coincide = telefonosCoinciden(telEnSheet, telefonoNormalizado);
+      if (coincide) {
+        log('✅', `Match encontrado: "${telEnSheet}" coincide con "${telefonoNormalizado}"`);
       }
-      return telEnSheet === telefonoNormalizado;
+      return coincide;
     });
 
     if (estadoRow) {
@@ -148,8 +163,8 @@ async function guardarEstadoConversacion(estado) {
 
     const rows = response.data.values || [];
     const rowIndex = rows.findIndex(row => {
-      const telEnSheet = normalizarTelefono(row[0] || '');
-      return telEnSheet === telefonoNormalizado;
+      const telEnSheet = row[0] || '';
+      return telefonosCoinciden(telEnSheet, telefonoNormalizado);
     });
 
     const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
@@ -283,11 +298,13 @@ async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_
 
     const rows = response.data.values || [];
     
-    // Filtrar mensajes del cliente
+    // Filtrar mensajes del cliente (comparación flexible)
     const mensajesCliente = rows.filter(row => {
-      const telEnSheet = normalizarTelefono(row[1] || '');
-      return telEnSheet === telefonoNormalizado;
+      const telEnSheet = row[1] || '';
+      return telefonosCoinciden(telEnSheet, telefonoNormalizado);
     });
+    
+    log('📚', `Mensajes encontrados para ${telefonoNormalizado}: ${mensajesCliente.length} de ${rows.length} total`);
 
     // Tomar los últimos N mensajes (excluyendo el actual que aún no se ha procesado completamente)
     const historial = mensajesCliente.slice(-limite).map(row => ({
