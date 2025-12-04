@@ -298,10 +298,23 @@ function detectarDatosEnMensaje(mensaje) {
   const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let datos = {};
   
-  // Detectar si es un cambio de opinión (para logging)
-  const esCambioOpinion = /mejor|cambio|cambie|prefiero|en realidad|ya no|ahora quiero|pensandolo bien/.test(mensajeLower);
-  if (esCambioOpinion) {
-    log('🔄', 'Detectado posible cambio de opinión');
+  // DETECTAR CAMBIO DE OPINIÓN
+  const quiereCambiar = 
+    /\b(mejor|cambio|cambie|prefiero|en realidad|ya no|ahora quiero|pensandolo bien|pensándolo bien)\b/i.test(mensajeLower) ||
+    /\b(otra|otras|otro|otros|diferentes?)\s*(opciones?|propiedades?|casas?|terrenos?|departamentos?)\b/i.test(mensajeLower) ||
+    /\b(no me convence|no me gusta|muy caro|muy lejos|busco otra|vemos otra|muestrame otra|muéstrame otra)\b/i.test(mensajeLower) ||
+    /\b(cancelar?|no quiero|dejalo|déjalo|olvidalo|olvídalo)\s*(la cita|agendar|visita)?\b/i.test(mensajeLower);
+  
+  if (quiereCambiar) {
+    datos.cambio_opinion = true;
+    log('🔄', 'Detectado: cliente quiere cambiar/ver otras opciones');
+  }
+  
+  // DETECTAR CANCELACIÓN ESPECÍFICA
+  const quiereCancelar = /\b(cancelar?|no quiero|ya no|dejalo|déjalo)\s*(la cita|agendar|visita|ir)?\b/i.test(mensajeLower);
+  if (quiereCancelar) {
+    datos.quiere_cancelar = true;
+    log('❌', 'Detectado: cliente quiere cancelar');
   }
 
   // TIPO DE PROPIEDAD (siempre sobrescribe si detecta algo nuevo)
@@ -399,10 +412,40 @@ function detectarDatosEnMensaje(mensaje) {
 function actualizarEstadoConDatos(estadoActual, datosNuevos) {
   let nuevaEtapa = estadoActual.etapa;
   
-  // Determinar nueva etapa basado en el flujo de conversación
-  const tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
-  const zonaFinal = datosNuevos.zona || estadoActual.zona;
-  const presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
+  // Determinar datos finales
+  let tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
+  let zonaFinal = datosNuevos.zona || estadoActual.zona;
+  let presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
+  
+  // CAMBIO DE OPINIÓN - Retroceder etapa
+  if (datosNuevos.cambio_opinion || datosNuevos.quiere_cancelar) {
+    log('🔄', 'Procesando cambio de opinión...');
+    
+    if (datosNuevos.quiere_cancelar) {
+      // Cancelación: volver a interesado o búsqueda
+      nuevaEtapa = tipoFinal ? 'busqueda' : 'inicial';
+      log('📊', `Cancelación detectada. Etapa: ${nuevaEtapa}`);
+    } else if (datosNuevos.tipo_propiedad && datosNuevos.tipo_propiedad !== estadoActual.tipo_propiedad) {
+      // Cambió tipo de propiedad → reiniciar búsqueda
+      nuevaEtapa = 'busqueda';
+      log('📊', 'Nuevo tipo de propiedad. Etapa: busqueda');
+    } else {
+      // Quiere ver otras opciones del mismo tipo
+      nuevaEtapa = 'busqueda';
+      log('📊', 'Quiere otras opciones. Etapa: busqueda');
+    }
+    
+    const estadoNuevo = {
+      ...estadoActual,
+      tipo_propiedad: tipoFinal,
+      zona: zonaFinal,
+      presupuesto: presupuestoFinal,
+      etapa: nuevaEtapa,
+      cambio_opinion: true
+    };
+    return estadoNuevo;
+  }
+  
   const tieneTodosDatos = tipoFinal && zonaFinal && presupuestoFinal;
   
   // Lógica de etapas (en orden de prioridad)
@@ -606,7 +649,24 @@ ${instruccionEspecifica}
 5. Usa 1-2 emojis por mensaje (no más)
 6. Cuando el cliente dice "sí" a algo, AVANZA al siguiente paso
 7. Si el cliente cambia de tema o dice algo no relacionado, redirige amablemente
+8. Si el cliente cambia de opinión o quiere ver otras opciones → NO te ofendas, ayúdalo con gusto
 </reglas_de_oro>
+
+<cambio_de_opinion>
+Si el cliente dice algo como:
+- "mejor veamos otra opción"
+- "muy caro, tienes algo más económico?"
+- "prefiero en otra zona"
+- "ya no quiero agendar" / "mejor otro día"
+- "mejor casas en lugar de terrenos"
+
+Tu respuesta debe ser:
+1. Acepta el cambio con actitud positiva: "¡Claro, sin problema! 😊"
+2. Si cambió tipo/zona/presupuesto → confirma el nuevo criterio
+3. Si quiere otras opciones → usa consultar_documentos de nuevo
+4. Si cancela cita → "Perfecto, cuando estés listo me avisas 📱"
+5. NUNCA presiones ni insistas en la opción anterior
+</cambio_de_opinion>
 
 <manejo_de_respuestas>
 - "Hola" / Saludo → Saluda y pregunta qué tipo de propiedad busca
