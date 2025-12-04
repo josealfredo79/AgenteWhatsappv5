@@ -406,6 +406,11 @@ ${siguienteAccion}
 6. CAMBIOS DE OPINIÓN: Si el cliente dice "mejor quiero casa" o "cambié, prefiero terreno", 
    acepta el cambio naturalmente con algo como "¡Perfecto! Ahora buscaremos [nuevo tipo]..."
    El sistema ya actualizó el estado, solo confirma el cambio amablemente.
+7. AGENDAMIENTO: Cuando el cliente quiera agendar una visita:
+   - PRIMERO pregunta: "¿Qué día y hora te funcionaría para la visita?"
+   - SOLO usa agendar_cita cuando el cliente haya dado fecha y hora específicas
+   - NUNCA inventes fechas - espera a que el cliente las proporcione
+   - Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 </reglas_criticas>
 
 <formato_respuesta>
@@ -434,14 +439,14 @@ const tools = [
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda una visita a una propiedad cuando el cliente confirme interés.',
+    description: 'Agenda una visita a una propiedad. IMPORTANTE: Solo usar cuando el cliente YA HAYA PROPORCIONADO una fecha y hora específicas. Si el cliente dice "sí quiero agendar" pero NO ha dado fecha, NO uses esta herramienta - primero pregúntale qué día y hora le conviene.',
     input_schema: {
       type: 'object',
       properties: {
-        resumen: { type: 'string' },
-        fecha: { type: 'string', description: 'Formato: YYYY-MM-DD' },
-        hora_inicio: { type: 'string', description: 'Formato: HH:MM' },
-        duracion_minutos: { type: 'number' }
+        resumen: { type: 'string', description: 'Título de la cita, ej: Visita a terreno en Zapopan' },
+        fecha: { type: 'string', description: 'Fecha que el CLIENTE proporcionó. Formato: YYYY-MM-DD. NO inventes fechas.' },
+        hora_inicio: { type: 'string', description: 'Hora que el CLIENTE proporcionó. Formato: HH:MM (24hrs)' },
+        duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' }
       },
       required: ['resumen', 'fecha', 'hora_inicio']
     }
@@ -509,7 +514,15 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
       }
     });
 
-    return { success: true, eventLink: result.data.htmlLink };
+    const eventLink = result.data.htmlLink;
+    log('✅', 'Cita agendada exitosamente', { eventLink });
+    
+    return { 
+      success: true, 
+      mensaje: `Cita agendada exitosamente para el ${inicio.toFormat("d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}`,
+      eventLink: eventLink,
+      instruccion: 'DEBES incluir este link en tu respuesta al cliente para que pueda agregarlo a su calendario'
+    };
   } catch (error) {
     log('❌', 'Error en agendar_cita', { error: error.message });
     return { success: false, error: error.message };
