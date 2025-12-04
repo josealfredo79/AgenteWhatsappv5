@@ -5,6 +5,134 @@ import { DateTime } from 'luxon';
 import fs from 'fs';
 import path from 'path';
 
+// ============================================================================
+// DETECCIÓN AUTOMÁTICA DE ESTADO (por código, no depende de Claude)
+// ============================================================================
+
+/**
+ * Detecta y actualiza el estado del cliente basándose en el mensaje.
+ * PERMITE CAMBIOS si el usuario usa palabras clave de cambio de opinión.
+ */
+function detectarDatosEnMensaje(mensaje, estadoActual) {
+  const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  
+  // Detectar si el usuario quiere CAMBIAR algo
+  const quiereCambiar = /\b(mejor|cambio|cambie|prefiero|en vez de|en lugar de|no,?\s|ahora quiero|finalmente|mejor dicho)\b/i.test(mensajeLower);
+  
+  let cambios = {};
+  
+  // ===== DETECTAR TIPO DE PROPIEDAD =====
+  const tipoActual = estadoActual.tipo_propiedad || '';
+  const debeCambiarTipo = !tipoActual || quiereCambiar;
+  
+  if (debeCambiarTipo) {
+    if (/\b(terreno|terrenos|lote|lotes)\b/.test(mensajeLower)) {
+      cambios.tipo_propiedad = 'Terreno';
+    } else if (/\b(casa|casas|residencia)\b/.test(mensajeLower)) {
+      cambios.tipo_propiedad = 'Casa';
+    } else if (/\b(departamento|depto|deptos|apartamento)\b/.test(mensajeLower)) {
+      cambios.tipo_propiedad = 'Departamento';
+    } else if (/\b(local|locales|comercial|oficina|oficinas)\b/.test(mensajeLower)) {
+      cambios.tipo_propiedad = 'Local comercial';
+    } else if (/\b(bodega|nave|industrial)\b/.test(mensajeLower)) {
+      cambios.tipo_propiedad = 'Bodega/Nave industrial';
+    }
+  }
+  
+  // ===== DETECTAR ZONA =====
+  const zonaActual = estadoActual.zona || '';
+  const debeCambiarZona = !zonaActual || quiereCambiar;
+  
+  if (debeCambiarZona) {
+    // Zonas específicas de Jalisco (expandir según necesidad)
+    if (/\bzapopan\b/.test(mensajeLower)) {
+      cambios.zona = 'Zapopan, Jalisco';
+    } else if (/\bguadalajara\b/.test(mensajeLower)) {
+      cambios.zona = 'Guadalajara, Jalisco';
+    } else if (/\btlajomulco\b/.test(mensajeLower)) {
+      cambios.zona = 'Tlajomulco, Jalisco';
+    } else if (/\btonala\b/.test(mensajeLower)) {
+      cambios.zona = 'Tonalá, Jalisco';
+    } else if (/\btlaquepaque\b/.test(mensajeLower)) {
+      cambios.zona = 'Tlaquepaque, Jalisco';
+    } else if (/\bchapala\b/.test(mensajeLower)) {
+      cambios.zona = 'Chapala, Jalisco';
+    } else if (/\bajijic\b/.test(mensajeLower)) {
+      cambios.zona = 'Ajijic, Jalisco';
+    } else if (/\bpuerto vallarta\b|\bvallarta\b/.test(mensajeLower)) {
+      cambios.zona = 'Puerto Vallarta, Jalisco';
+    } else if (/\bcentro\b/.test(mensajeLower)) {
+      cambios.zona = 'Centro';
+    } else if (/\bnorte\b/.test(mensajeLower)) {
+      cambios.zona = 'Zona Norte';
+    } else if (/\bsur\b/.test(mensajeLower)) {
+      cambios.zona = 'Zona Sur';
+    }
+  }
+  
+  // ===== DETECTAR PRESUPUESTO =====
+  const presupuestoActual = estadoActual.presupuesto || '';
+  const debeCambiarPresupuesto = !presupuestoActual || quiereCambiar;
+  
+  if (debeCambiarPresupuesto) {
+    // Detectar "X millones" o "X.X millones"
+    const matchMillones = mensajeLower.match(/(\d+(?:\.\d+)?)\s*(millon|millones|mdp|m)/i);
+    if (matchMillones) {
+      const cantidad = matchMillones[1];
+      cambios.presupuesto = `${cantidad} millones de pesos`;
+    } else {
+      // Detectar números grandes (posibles precios)
+      const matchNumero = mensaje.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{6,})/);
+      if (matchNumero) {
+        const numero = matchNumero[1].replace(/,/g, '');
+        const valor = parseInt(numero, 10);
+        if (valor >= 100000) {
+          if (valor >= 1000000) {
+            cambios.presupuesto = `${(valor / 1000000).toFixed(1)} millones de pesos`;
+          } else {
+            cambios.presupuesto = `${valor.toLocaleString('es-MX')} pesos`;
+          }
+        }
+      }
+    }
+  }
+  
+  // ===== DETECTAR INTENCIÓN/ETAPA =====
+  if (/\b(agendar|cita|visita|ver la propiedad|conocer|mostrar)\b/.test(mensajeLower)) {
+    cambios.etapa = 'agendar';
+  } else if (/\b(comprar|adquirir|interesa|busco|quiero)\b/.test(mensajeLower)) {
+    cambios.etapa = 'busqueda';
+  }
+  
+  return cambios;
+}
+
+/**
+ * Aplica los cambios detectados al estado y lo guarda
+ */
+async function detectarYActualizarEstado(mensaje, telefono, estadoActual, guardarFn) {
+  const cambios = detectarDatosEnMensaje(mensaje, estadoActual);
+  
+  if (Object.keys(cambios).length > 0) {
+    const nuevoEstado = {
+      ...estadoActual,
+      ...cambios,
+      telefono
+    };
+    
+    console.log('🔍 Datos detectados automáticamente:', cambios);
+    
+    // Guardar inmediatamente
+    if (guardarFn) {
+      await guardarFn(nuevoEstado);
+    }
+    
+    return nuevoEstado;
+  }
+  
+  return estadoActual;
+}
+
 function getGoogleAuth(scopes) {
   const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE ||
     path.join(process.cwd(), 'google-credentials.json');
@@ -135,63 +263,37 @@ function construirPromptConEstado(estado) {
   }
 
   const estadoTexto = infoConocida.length > 0
-    ? `\n\n**INFORMACIÓN YA RECOPILADA DEL CLIENTE:**\n${infoConocida.join('\n')}\n\n**⚠️ CRÍTICO:** NUNCA vuelvas a preguntar por estos datos. El cliente YA te los proporcionó. Solo pregunta lo que falte.\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos actualizados (tipo, zona, presupuesto). Si no hay cambios, mantén los anteriores. Si omites este bloque, la respuesta será ignorada.`
-    : '\n\n**INSTRUCCIÓN OBLIGATORIA:** Al final de cada respuesta SIEMPRE incluye el bloque [ESTADO]{...}[/ESTADO] con los datos que detectes (tipo, zona, presupuesto). Si no hay datos aún, usa valores vacíos.';
+    ? `\n\n**🎯 DATOS CONFIRMADOS DEL CLIENTE (YA DETECTADOS):**\n${infoConocida.join('\n')}\n\n**⚠️ REGLA CRÍTICA:** Estos datos YA están guardados. NO los preguntes de nuevo. Solo pregunta lo que FALTE.\n- Si tipo_propiedad está vacío → pregunta qué tipo busca\n- Si zona está vacío → pregunta en qué zona\n- Si presupuesto está vacío → pregunta su presupuesto\n- Si YA tienes los 3 datos → ofrece buscar propiedades o agendar cita`
+    : '\n\n**📋 CLIENTE NUEVO:** No tenemos información aún. Saluda y pregunta qué tipo de propiedad busca.';
 
-  return `Eres un Asesor Inmobiliario Senior, experto en ventas consultivas y atención al cliente. Tu nombre es Claude.
+  return `Eres un Asesor Inmobiliario experto. Tu nombre es Ana.
 
-**🔍 CONTEXTO IMPORTANTE:**
-Tienes acceso al historial completo de la conversación. Lee los mensajes anteriores para entender el contexto y NO repetir preguntas que ya hiciste o información que el cliente ya proporcionó.
+**🔑 CONTEXTO DE LA CONVERSACIÓN:**
+Tienes acceso al historial completo. Lee los mensajes anteriores para entender el contexto.
 ${estadoTexto}
 
-**OBJETIVO:**
-Guiar al cliente de manera profesional y empática hacia la compra de su propiedad ideal, recopilando solo la información que REALMENTE falte para ofrecerle las mejores opciones, o agendar una cita si ya muestra interés claro.
+**📌 DATOS QUE NECESITAS RECOPILAR:**
+1. Tipo de propiedad (casa, terreno, departamento, local)
+2. Zona o ciudad de interés
+3. Presupuesto aproximado
 
-**ESTILO DE COMUNICACIÓN:**
-- Profesional, cálido y directo (máximo 3-4 líneas por mensaje).
-- Usa emojis con moderación (1-2 por mensaje).
-- Escucha activa: valida lo que dice el cliente antes de preguntar.
-- **NUNCA repitas preguntas** sobre datos ya proporcionados en el historial.
-- Demuestra que recuerdas la conversación anterior.
+**🎯 TU OBJETIVO:**
+- Si FALTAN datos → pregunta UNO a la vez de forma natural
+- Si TIENES los 3 datos → usa 'consultar_documentos' para buscar opciones
+- Si el cliente muestra interés en una propiedad → ofrece agendar cita
 
-**FLUJO DE CONVERSACIÓN:**
-1. **PRIMERO:** Revisa el historial para saber qué información ya tienes.
-2. **LUEGO:** Si faltan datos (tipo, zona, presupuesto), pregunta SOLO lo que falte.
-3. **FINALMENTE:** Si ya tienes todos los datos, consulta propiedades y ofrece opciones.
-4. Si el cliente muestra interés, propón agendar una cita.
+**💬 ESTILO:**
+- Mensajes cortos (2-3 líneas máximo)
+- Profesional pero cálido
+- 1-2 emojis por mensaje
+- Si el cliente cambia de opinión, acepta el cambio naturalmente
 
-**REGLAS DE NEGOCIO:**
-- No inventes propiedades. Usa solo la información de 'consultar_documentos'.
-- Si no sabes algo, ofrece averiguarlo.
-- Respeta el presupuesto del cliente.
-- Si el cliente saluda después de una conversación previa, reconoce que ya lo conoces.
-
-**GESTIÓN DE ESTADO (JSON OCULTO):**
-Al final de cada respuesta, incluye un bloque JSON con los datos actualizados que hayas detectado. Si no hay cambios, mantén los anteriores.
-[ESTADO]{"tipo":"...","zona":"...","presupuesto":"..."}[/ESTADO]
+**🚫 PROHIBIDO:**
+- Preguntar datos que YA tienes (revisa la sección DATOS CONFIRMADOS)
+- Inventar propiedades
+- Mensajes largos
 
 Zona horaria: America/Mexico_City`;
-}
-
-function extraerEstadoDeRespuesta(respuesta, estadoActual) {
-  const regex = /\[ESTADO\](.*?)\[\/ESTADO\]/s;
-  const match = respuesta.match(regex);
-
-  if (match) {
-    try {
-      const nuevosDatos = JSON.parse(match[1]);
-      return {
-        ...estadoActual,
-        tipo_propiedad: nuevosDatos.tipo || estadoActual.tipo_propiedad || '',
-        zona: nuevosDatos.zona || estadoActual.zona || '',
-        presupuesto: nuevosDatos.presupuesto || estadoActual.presupuesto || ''
-      };
-    } catch (e) {
-      console.error('Error parsing estado:', e);
-    }
-  }
-
-  return estadoActual;
 }
 
 function limpiarRespuesta(respuesta) {
@@ -347,39 +449,60 @@ export default async function handler(req, res) {
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const estado = await obtenerEstadoConversacion(telefono);
-    console.log('📋 Estado actual:', JSON.stringify(estado));
+    // 1. Obtener estado actual del cliente
+    const estadoOriginal = await obtenerEstadoConversacion(telefono);
+    console.log('📋 Estado antes de detección:', JSON.stringify(estadoOriginal));
 
+    // 2. ⭐ DETECCIÓN AUTOMÁTICA: Analizar mensaje ANTES de llamar a Claude
+    const estadoActualizado = await detectarYActualizarEstado(
+      Body, 
+      telefono, 
+      estadoOriginal, 
+      guardarEstadoConversacion
+    );
+    console.log('🔍 Estado después de detección:', JSON.stringify(estadoActualizado));
+
+    // 3. Obtener historial de conversación
     const historial = await obtenerHistorialConversacion(telefono, 10, true);
 
+    // 4. Construir mensajes para Claude con alternancia correcta
     let messages = [];
 
     if (historial.length > 0) {
-      // Construir array de mensajes del historial
-      historial.forEach(msg => {
+      let lastRole = null;
+      
+      for (const msg of historial) {
         const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
         const contenido = limpiarRespuesta(msg.mensaje);
-        if (contenido) {
+        
+        if (!contenido) continue;
+        
+        // Si es el mismo rol que el anterior, fusionar mensajes
+        if (role === lastRole && messages.length > 0) {
+          messages[messages.length - 1].content += '\n' + contenido;
+        } else {
           messages.push({ role, content: contenido });
+          lastRole = role;
         }
-      });
+      }
 
-      // Validar que el último mensaje del historial sea 'assistant'
-      // para que el nuevo mensaje 'user' alterne correctamente
-      if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-        console.log('⚠️ Último mensaje del historial es user, removiendo para mantener alternancia');
+      // Asegurar que el último mensaje del historial sea 'assistant'
+      // para que el nuevo 'user' alterne correctamente
+      while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
         messages.pop();
       }
     }
 
-    // Agregar el mensaje actual del usuario
+    // 5. Agregar el mensaje actual del usuario
     messages.push({ role: 'user', content: Body });
 
-    const systemPrompt = construirPromptConEstado(estado);
+    // 6. Construir prompt con estado YA ACTUALIZADO
+    const systemPrompt = construirPromptConEstado(estadoActualizado);
 
-    console.log(`💬 Enviando ${messages.length} mensajes a Claude (${historial.length} historial + 1 actual)`);
+    console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
     console.log('📝 Roles:', messages.map(m => m.role).join(' → '));
 
+    // 7. Llamar a Claude
     let response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
       max_tokens: 500,
@@ -388,6 +511,7 @@ export default async function handler(req, res) {
       messages
     });
 
+    // 8. Procesar tool calls si las hay
     while (response.stop_reason === 'tool_use') {
       const toolUse = response.content.find(b => b.type === 'tool_use');
       if (!toolUse) break;
@@ -409,13 +533,11 @@ export default async function handler(req, res) {
       });
     }
 
+    // 9. Obtener respuesta final
     const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
-
-    const nuevoEstado = extraerEstadoDeRespuesta(respuestaCompleta, estado);
-    await guardarEstadoConversacion(nuevoEstado);
-
     const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
 
+    // 10. Enviar por WhatsApp
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
@@ -423,9 +545,10 @@ export default async function handler(req, res) {
       body: respuestaLimpia
     });
 
+    // 11. Guardar respuesta en historial
     await guardarMensajeEnSheet({ telefono, direccion: 'outbound', mensaje: respuestaLimpia, messageId: twilioMsg.sid });
 
-    console.log('✅ Respuesta enviada, estado guardado');
+    console.log('✅ Respuesta enviada');
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('❌ Error:', error);
