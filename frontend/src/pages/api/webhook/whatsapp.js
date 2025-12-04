@@ -251,49 +251,21 @@ async function guardarEstadoConversacion(estado) {
 }
 
 function construirPromptConEstado(estado) {
-  let infoConocida = [];
-  if (estado.tipo_propiedad) {
-    infoConocida.push(`- Tipo de propiedad: ${estado.tipo_propiedad}`);
-  }
-  if (estado.zona) {
-    infoConocida.push(`- Zona/Ciudad: ${estado.zona}`);
-  }
-  if (estado.presupuesto) {
-    infoConocida.push(`- Presupuesto: ${estado.presupuesto}`);
-  }
+  // Prompt minimalista y directo
+  return `Eres Ana, asesora inmobiliaria profesional.
 
-  const estadoTexto = infoConocida.length > 0
-    ? `\n\n**🎯 DATOS CONFIRMADOS DEL CLIENTE (YA DETECTADOS):**\n${infoConocida.join('\n')}\n\n**⚠️ REGLA CRÍTICA:** Estos datos YA están guardados. NO los preguntes de nuevo. Solo pregunta lo que FALTE.\n- Si tipo_propiedad está vacío → pregunta qué tipo busca\n- Si zona está vacío → pregunta en qué zona\n- Si presupuesto está vacío → pregunta su presupuesto\n- Si YA tienes los 3 datos → ofrece buscar propiedades o agendar cita`
-    : '\n\n**📋 CLIENTE NUEVO:** No tenemos información aún. Saluda y pregunta qué tipo de propiedad busca.';
+Tu trabajo es recopilar 3 datos del cliente:
+1. Tipo de propiedad (casa/terreno/departamento/local)
+2. Zona o ciudad
+3. Presupuesto
 
-  return `Eres un Asesor Inmobiliario experto. Tu nombre es Ana.
+Cuando tengas los 3 datos, usa la herramienta 'consultar_documentos'.
 
-**🔑 CONTEXTO DE LA CONVERSACIÓN:**
-Tienes acceso al historial completo. Lee los mensajes anteriores para entender el contexto.
-${estadoTexto}
-
-**📌 DATOS QUE NECESITAS RECOPILAR:**
-1. Tipo de propiedad (casa, terreno, departamento, local)
-2. Zona o ciudad de interés
-3. Presupuesto aproximado
-
-**🎯 TU OBJETIVO:**
-- Si FALTAN datos → pregunta UNO a la vez de forma natural
-- Si TIENES los 3 datos → usa 'consultar_documentos' para buscar opciones
-- Si el cliente muestra interés en una propiedad → ofrece agendar cita
-
-**💬 ESTILO:**
-- Mensajes cortos (2-3 líneas máximo)
-- Profesional pero cálido
-- 1-2 emojis por mensaje
-- Si el cliente cambia de opinión, acepta el cambio naturalmente
-
-**🚫 PROHIBIDO:**
-- Preguntar datos que YA tienes (revisa la sección DATOS CONFIRMADOS)
-- Inventar propiedades
-- Mensajes largos
-
-Zona horaria: America/Mexico_City`;
+Reglas:
+- Respuestas cortas (2-3 líneas)
+- 1-2 emojis máximo
+- NO repitas preguntas sobre datos que el cliente ya dio
+- El contexto del cliente viene en cada mensaje con [ESTADO_CLIENTE]`;
 }
 
 function limpiarRespuesta(respuesta) {
@@ -493,14 +465,37 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Agregar el mensaje actual del usuario
-    messages.push({ role: 'user', content: Body });
+    // 5. INYECCIÓN DE ESTADO EN MENSAJE (técnica de grounding de Anthropic)
+    // El estado SIEMPRE va en el mensaje para que Claude no lo ignore
+    const tipo = estadoActualizado.tipo_propiedad || 'NO_TIENE';
+    const zona = estadoActualizado.zona || 'NO_TIENE';
+    const presupuesto = estadoActualizado.presupuesto || 'NO_TIENE';
+    
+    // Calcular qué falta
+    let faltantes = [];
+    if (tipo === 'NO_TIENE') faltantes.push('tipo');
+    if (zona === 'NO_TIENE') faltantes.push('zona');
+    if (presupuesto === 'NO_TIENE') faltantes.push('presupuesto');
+    
+    const mensajeConEstado = `[ESTADO_CLIENTE]
+Tipo: ${tipo}
+Zona: ${zona}
+Presupuesto: ${presupuesto}
+Faltan: ${faltantes.length > 0 ? faltantes.join(', ') : 'NINGUNO - BUSCAR PROPIEDADES'}
+[/ESTADO_CLIENTE]
+
+Cliente dice: ${Body}`;
+    
+    console.log('📎 Mensaje con estado inyectado:', mensajeConEstado);
+    
+    messages.push({ role: 'user', content: mensajeConEstado });
 
     // 6. Construir prompt con estado YA ACTUALIZADO
     const systemPrompt = construirPromptConEstado(estadoActualizado);
 
     console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
     console.log('📝 Roles:', messages.map(m => m.role).join(' → '));
+    console.log('📊 Estado enviado:', JSON.stringify(estadoActualizado));
 
     // 7. Llamar a Claude
     let response = await anthropic.messages.create({
