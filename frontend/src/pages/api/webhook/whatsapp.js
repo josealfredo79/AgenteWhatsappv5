@@ -6,133 +6,30 @@ import fs from 'fs';
 import path from 'path';
 
 // ============================================================================
-// DETECCIÓN AUTOMÁTICA DE ESTADO (por código, no depende de Claude)
+// CONFIGURACIÓN
 // ============================================================================
+const CONFIG = {
+  MODEL: 'claude-3-5-haiku-20241022',
+  MAX_TOKENS: 1024,
+  HISTORIAL_LIMITE: 15,
+  TIMEZONE: 'America/Mexico_City'
+};
 
-/**
- * Detecta y actualiza el estado del cliente basándose en el mensaje.
- * PERMITE CAMBIOS si el usuario usa palabras clave de cambio de opinión.
- */
-function detectarDatosEnMensaje(mensaje, estadoActual) {
-  const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  
-  // Detectar si el usuario quiere CAMBIAR algo
-  const quiereCambiar = /\b(mejor|cambio|cambie|prefiero|en vez de|en lugar de|no,?\s|ahora quiero|finalmente|mejor dicho)\b/i.test(mensajeLower);
-  
-  let cambios = {};
-  
-  // ===== DETECTAR TIPO DE PROPIEDAD =====
-  const tipoActual = estadoActual.tipo_propiedad || '';
-  const debeCambiarTipo = !tipoActual || quiereCambiar;
-  
-  if (debeCambiarTipo) {
-    if (/\b(terreno|terrenos|lote|lotes)\b/.test(mensajeLower)) {
-      cambios.tipo_propiedad = 'Terreno';
-    } else if (/\b(casa|casas|residencia)\b/.test(mensajeLower)) {
-      cambios.tipo_propiedad = 'Casa';
-    } else if (/\b(departamento|depto|deptos|apartamento)\b/.test(mensajeLower)) {
-      cambios.tipo_propiedad = 'Departamento';
-    } else if (/\b(local|locales|comercial|oficina|oficinas)\b/.test(mensajeLower)) {
-      cambios.tipo_propiedad = 'Local comercial';
-    } else if (/\b(bodega|nave|industrial)\b/.test(mensajeLower)) {
-      cambios.tipo_propiedad = 'Bodega/Nave industrial';
-    }
+// ============================================================================
+// SISTEMA DE LOGS DETALLADO
+// ============================================================================
+function log(emoji, mensaje, datos = null) {
+  const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('HH:mm:ss');
+  if (datos) {
+    console.log(`[${timestamp}] ${emoji} ${mensaje}:`, JSON.stringify(datos, null, 2));
+  } else {
+    console.log(`[${timestamp}] ${emoji} ${mensaje}`);
   }
-  
-  // ===== DETECTAR ZONA =====
-  const zonaActual = estadoActual.zona || '';
-  const debeCambiarZona = !zonaActual || quiereCambiar;
-  
-  if (debeCambiarZona) {
-    // Zonas específicas de Jalisco (expandir según necesidad)
-    if (/\bzapopan\b/.test(mensajeLower)) {
-      cambios.zona = 'Zapopan, Jalisco';
-    } else if (/\bguadalajara\b/.test(mensajeLower)) {
-      cambios.zona = 'Guadalajara, Jalisco';
-    } else if (/\btlajomulco\b/.test(mensajeLower)) {
-      cambios.zona = 'Tlajomulco, Jalisco';
-    } else if (/\btonala\b/.test(mensajeLower)) {
-      cambios.zona = 'Tonalá, Jalisco';
-    } else if (/\btlaquepaque\b/.test(mensajeLower)) {
-      cambios.zona = 'Tlaquepaque, Jalisco';
-    } else if (/\bchapala\b/.test(mensajeLower)) {
-      cambios.zona = 'Chapala, Jalisco';
-    } else if (/\bajijic\b/.test(mensajeLower)) {
-      cambios.zona = 'Ajijic, Jalisco';
-    } else if (/\bpuerto vallarta\b|\bvallarta\b/.test(mensajeLower)) {
-      cambios.zona = 'Puerto Vallarta, Jalisco';
-    } else if (/\bcentro\b/.test(mensajeLower)) {
-      cambios.zona = 'Centro';
-    } else if (/\bnorte\b/.test(mensajeLower)) {
-      cambios.zona = 'Zona Norte';
-    } else if (/\bsur\b/.test(mensajeLower)) {
-      cambios.zona = 'Zona Sur';
-    }
-  }
-  
-  // ===== DETECTAR PRESUPUESTO =====
-  const presupuestoActual = estadoActual.presupuesto || '';
-  const debeCambiarPresupuesto = !presupuestoActual || quiereCambiar;
-  
-  if (debeCambiarPresupuesto) {
-    // Detectar "X millones" o "X.X millones"
-    const matchMillones = mensajeLower.match(/(\d+(?:\.\d+)?)\s*(millon|millones|mdp|m)/i);
-    if (matchMillones) {
-      const cantidad = matchMillones[1];
-      cambios.presupuesto = `${cantidad} millones de pesos`;
-    } else {
-      // Detectar números grandes (posibles precios)
-      const matchNumero = mensaje.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{6,})/);
-      if (matchNumero) {
-        const numero = matchNumero[1].replace(/,/g, '');
-        const valor = parseInt(numero, 10);
-        if (valor >= 100000) {
-          if (valor >= 1000000) {
-            cambios.presupuesto = `${(valor / 1000000).toFixed(1)} millones de pesos`;
-          } else {
-            cambios.presupuesto = `${valor.toLocaleString('es-MX')} pesos`;
-          }
-        }
-      }
-    }
-  }
-  
-  // ===== DETECTAR INTENCIÓN/ETAPA =====
-  if (/\b(agendar|cita|visita|ver la propiedad|conocer|mostrar)\b/.test(mensajeLower)) {
-    cambios.etapa = 'agendar';
-  } else if (/\b(comprar|adquirir|interesa|busco|quiero)\b/.test(mensajeLower)) {
-    cambios.etapa = 'busqueda';
-  }
-  
-  return cambios;
 }
 
-/**
- * Aplica los cambios detectados al estado y lo guarda
- */
-async function detectarYActualizarEstado(mensaje, telefono, estadoActual, guardarFn) {
-  const cambios = detectarDatosEnMensaje(mensaje, estadoActual);
-  
-  if (Object.keys(cambios).length > 0) {
-    const nuevoEstado = {
-      ...estadoActual,
-      ...cambios,
-      telefono
-    };
-    
-    console.log('🔍 Datos detectados automáticamente:', cambios);
-    
-    // Guardar inmediatamente
-    if (guardarFn) {
-      await guardarFn(nuevoEstado);
-    }
-    
-    return nuevoEstado;
-  }
-  
-  return estadoActual;
-}
-
+// ============================================================================
+// GOOGLE AUTH
+// ============================================================================
 function getGoogleAuth(scopes) {
   const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE ||
     path.join(process.cwd(), 'google-credentials.json');
@@ -152,7 +49,21 @@ function getGoogleAuth(scopes) {
   });
 }
 
+// ============================================================================
+// NORMALIZAR TELÉFONO (para consistencia en búsquedas)
+// ============================================================================
+function normalizarTelefono(telefono) {
+  // Remover 'whatsapp:' si existe y cualquier espacio
+  return telefono.replace('whatsapp:', '').replace(/\s/g, '').trim();
+}
+
+// ============================================================================
+// ESTADO DEL CLIENTE - OBTENER
+// ============================================================================
 async function obtenerEstadoConversacion(telefono) {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+  log('📖', `Buscando estado para teléfono: ${telefonoNormalizado}`);
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -164,11 +75,17 @@ async function obtenerEstadoConversacion(telefono) {
     });
 
     const rows = response.data.values || [];
-    const estadoRow = rows.find(row => row[0] === telefono);
+    log('📊', `Total filas en Estados: ${rows.length}`);
+    
+    // Buscar con teléfono normalizado
+    const estadoRow = rows.find(row => {
+      const telEnSheet = normalizarTelefono(row[0] || '');
+      return telEnSheet === telefonoNormalizado;
+    });
 
     if (estadoRow) {
-      return {
-        telefono: estadoRow[0],
+      const estado = {
+        telefono: telefonoNormalizado,
         tipo_propiedad: estadoRow[1] || '',
         zona: estadoRow[2] || '',
         presupuesto: estadoRow[3] || '',
@@ -176,10 +93,13 @@ async function obtenerEstadoConversacion(telefono) {
         resumen: estadoRow[5] || '',
         ultima_actualizacion: estadoRow[6] || ''
       };
+      log('✅', 'Estado encontrado', estado);
+      return estado;
     }
 
+    log('🆕', 'Cliente nuevo, sin estado previo');
     return {
-      telefono,
+      telefono: telefonoNormalizado,
       tipo_propiedad: '',
       zona: '',
       presupuesto: '',
@@ -188,9 +108,9 @@ async function obtenerEstadoConversacion(telefono) {
       ultima_actualizacion: ''
     };
   } catch (error) {
-    console.error('Error obtener estado:', error.message);
+    log('❌', 'Error al obtener estado', { error: error.message });
     return {
-      telefono,
+      telefono: telefonoNormalizado,
       tipo_propiedad: '',
       zona: '',
       presupuesto: '',
@@ -201,7 +121,13 @@ async function obtenerEstadoConversacion(telefono) {
   }
 }
 
+// ============================================================================
+// ESTADO DEL CLIENTE - GUARDAR
+// ============================================================================
 async function guardarEstadoConversacion(estado) {
+  const telefonoNormalizado = normalizarTelefono(estado.telefono);
+  log('💾', `Guardando estado para: ${telefonoNormalizado}`, estado);
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -213,11 +139,14 @@ async function guardarEstadoConversacion(estado) {
     });
 
     const rows = response.data.values || [];
-    const rowIndex = rows.findIndex(row => row[0] === estado.telefono);
+    const rowIndex = rows.findIndex(row => {
+      const telEnSheet = normalizarTelefono(row[0] || '');
+      return telEnSheet === telefonoNormalizado;
+    });
 
-    const timestamp = DateTime.now().setZone('America/Mexico_City').toFormat('yyyy-MM-dd HH:mm:ss');
+    const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
     const rowData = [
-      estado.telefono,
+      telefonoNormalizado,
       estado.tipo_propiedad || '',
       estado.zona || '',
       estado.presupuesto || '',
@@ -227,6 +156,7 @@ async function guardarEstadoConversacion(estado) {
     ];
 
     if (rowIndex > -1) {
+      log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `Estados!A${rowIndex + 1}:G${rowIndex + 1}`,
@@ -234,6 +164,7 @@ async function guardarEstadoConversacion(estado) {
         requestBody: { values: [rowData] }
       });
     } else {
+      log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: 'Estados!A:G',
@@ -242,57 +173,241 @@ async function guardarEstadoConversacion(estado) {
       });
     }
 
-    console.log('💾 Estado guardado para', estado.telefono);
+    log('✅', 'Estado guardado exitosamente');
     return { success: true };
   } catch (error) {
-    console.error('Error guardar estado:', error.message);
+    log('❌', 'Error al guardar estado', { error: error.message });
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// DETECCIÓN AUTOMÁTICA DE DATOS EN MENSAJE
+// ============================================================================
+function detectarDatosEnMensaje(mensaje) {
+  const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let datos = {};
+
+  // TIPO DE PROPIEDAD
+  if (/\b(terreno|terrenos|lote|lotes)\b/.test(mensajeLower)) {
+    datos.tipo_propiedad = 'Terreno';
+  } else if (/\b(casa|casas|residencia)\b/.test(mensajeLower)) {
+    datos.tipo_propiedad = 'Casa';
+  } else if (/\b(departamento|depto|deptos|apartamento)\b/.test(mensajeLower)) {
+    datos.tipo_propiedad = 'Departamento';
+  } else if (/\b(local|locales|comercial|oficina|oficinas)\b/.test(mensajeLower)) {
+    datos.tipo_propiedad = 'Local comercial';
+  } else if (/\b(bodega|nave|industrial)\b/.test(mensajeLower)) {
+    datos.tipo_propiedad = 'Bodega';
+  }
+
+  // ZONA
+  if (/\bzapopan\b/.test(mensajeLower)) {
+    datos.zona = 'Zapopan, Jalisco';
+  } else if (/\bguadalajara\b/.test(mensajeLower)) {
+    datos.zona = 'Guadalajara, Jalisco';
+  } else if (/\btlajomulco\b/.test(mensajeLower)) {
+    datos.zona = 'Tlajomulco, Jalisco';
+  } else if (/\btonala\b/.test(mensajeLower)) {
+    datos.zona = 'Tonalá, Jalisco';
+  } else if (/\btlaquepaque\b/.test(mensajeLower)) {
+    datos.zona = 'Tlaquepaque, Jalisco';
+  } else if (/\bchapala\b/.test(mensajeLower)) {
+    datos.zona = 'Chapala, Jalisco';
+  } else if (/\bajijic\b/.test(mensajeLower)) {
+    datos.zona = 'Ajijic, Jalisco';
+  } else if (/\bvallarta\b/.test(mensajeLower)) {
+    datos.zona = 'Puerto Vallarta, Jalisco';
+  }
+
+  // PRESUPUESTO
+  const matchMillones = mensajeLower.match(/(\d+(?:\.\d+)?)\s*(millon|millones|mdp)/i);
+  if (matchMillones) {
+    datos.presupuesto = `${matchMillones[1]} millones de pesos`;
+  } else {
+    const matchNumero = mensaje.match(/(\d{1,3}(?:,\d{3})+|\d{6,})/);
+    if (matchNumero) {
+      const numero = parseInt(matchNumero[1].replace(/,/g, ''), 10);
+      if (numero >= 100000) {
+        datos.presupuesto = numero >= 1000000 
+          ? `${(numero / 1000000).toFixed(1)} millones de pesos`
+          : `${numero.toLocaleString('es-MX')} pesos`;
+      }
+    }
+  }
+
+  return datos;
+}
+
+// ============================================================================
+// ACTUALIZAR ESTADO CON NUEVOS DATOS DETECTADOS
+// ============================================================================
+function actualizarEstadoConDatos(estadoActual, datosNuevos) {
+  return {
+    ...estadoActual,
+    tipo_propiedad: datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad,
+    zona: datosNuevos.zona || estadoActual.zona,
+    presupuesto: datosNuevos.presupuesto || estadoActual.presupuesto
+  };
+}
+
+// ============================================================================
+// HISTORIAL DE CONVERSACIÓN
+// ============================================================================
+async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_LIMITE) {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+  
+  try {
+    const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Mensajes!A:E'
+    });
+
+    const rows = response.data.values || [];
+    
+    // Filtrar mensajes del cliente
+    const mensajesCliente = rows.filter(row => {
+      const telEnSheet = normalizarTelefono(row[1] || '');
+      return telEnSheet === telefonoNormalizado;
+    });
+
+    // Tomar los últimos N mensajes (excluyendo el actual que aún no se ha procesado completamente)
+    const historial = mensajesCliente.slice(-limite).map(row => ({
+      timestamp: row[0],
+      direccion: row[2], // 'inbound' o 'outbound'
+      mensaje: row[3]
+    }));
+
+    log('📚', `Historial cargado: ${historial.length} mensajes`);
+    return historial;
+  } catch (error) {
+    log('❌', 'Error al obtener historial', { error: error.message });
+    return [];
+  }
+}
+
+// ============================================================================
+// GUARDAR MENSAJE EN HISTORIAL
+// ============================================================================
+async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }) {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+  
+  try {
+    const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Mensajes!A:E',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { 
+        values: [[timestamp, telefonoNormalizado, direccion, mensaje, messageId || '']] 
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    log('❌', 'Error al guardar mensaje', { error: error.message });
     return { success: false };
   }
 }
 
-function construirPromptConEstado(estado) {
-  // Prompt minimalista y directo
-  return `Eres Ana, asesora inmobiliaria profesional.
+// ============================================================================
+// SYSTEM PROMPT PROFESIONAL (basado en documentación de Anthropic)
+// ============================================================================
+function construirSystemPrompt(estado) {
+  const tipo = estado.tipo_propiedad || null;
+  const zona = estado.zona || null;
+  const presupuesto = estado.presupuesto || null;
+  
+  // Construir contexto del cliente
+  let clienteContext = '';
+  if (tipo || zona || presupuesto) {
+    clienteContext = `
+<cliente_datos_confirmados>
+${tipo ? `- Tipo de propiedad: ${tipo}` : '- Tipo de propiedad: [PENDIENTE]'}
+${zona ? `- Zona: ${zona}` : '- Zona: [PENDIENTE]'}
+${presupuesto ? `- Presupuesto: ${presupuesto}` : '- Presupuesto: [PENDIENTE]'}
+</cliente_datos_confirmados>`;
+  }
 
-Tu trabajo es recopilar 3 datos del cliente:
-1. Tipo de propiedad (casa/terreno/departamento/local)
-2. Zona o ciudad
-3. Presupuesto
+  // Determinar siguiente acción
+  let siguienteAccion = '';
+  if (!tipo && !zona && !presupuesto) {
+    siguienteAccion = 'Este es un cliente nuevo. Saluda brevemente y pregunta qué tipo de propiedad busca.';
+  } else if (!tipo) {
+    siguienteAccion = 'Pregunta qué tipo de propiedad busca (casa, terreno, departamento, etc.)';
+  } else if (!zona) {
+    siguienteAccion = 'Pregunta en qué zona o ciudad le gustaría encontrar la propiedad.';
+  } else if (!presupuesto) {
+    siguienteAccion = 'Pregunta cuál es su presupuesto aproximado.';
+  } else {
+    siguienteAccion = 'Ya tienes todos los datos. USA LA HERRAMIENTA consultar_documentos para buscar propiedades disponibles.';
+  }
 
-Cuando tengas los 3 datos, usa la herramienta 'consultar_documentos'.
+  return `Eres Ana, una asesora inmobiliaria profesional y amable.
 
-Reglas:
-- Respuestas cortas (2-3 líneas)
-- 1-2 emojis máximo
-- NO repitas preguntas sobre datos que el cliente ya dio
-- El contexto del cliente viene en cada mensaje con [ESTADO_CLIENTE]`;
+<tu_objetivo>
+Ayudar al cliente a encontrar la propiedad ideal recopilando 3 datos esenciales:
+1. Tipo de propiedad (casa, terreno, departamento, local)
+2. Zona o ciudad de interés
+3. Presupuesto aproximado
+</tu_objetivo>
+
+${clienteContext}
+
+<siguiente_accion>
+${siguienteAccion}
+</siguiente_accion>
+
+<reglas_criticas>
+1. NUNCA preguntes por un dato que ya está confirmado arriba
+2. Si el cliente ya proporcionó un dato en este mensaje, NO lo vuelvas a preguntar
+3. Respuestas cortas: máximo 2-3 oraciones
+4. Usa 1-2 emojis por mensaje
+5. Si tienes los 3 datos, DEBES usar la herramienta consultar_documentos
+6. Si el cliente cambia de opinión, acepta el cambio naturalmente
+</reglas_criticas>
+
+<formato_respuesta>
+- Sé conciso y directo
+- No hagas listas largas de opciones
+- No repitas información que el cliente ya dio
+</formato_respuesta>`;
 }
 
-function limpiarRespuesta(respuesta) {
-  return respuesta.replace(/\[ESTADO\].*?\[\/ESTADO\]/s, '').trim();
-}
-
+// ============================================================================
+// TOOLS PARA CLAUDE
+// ============================================================================
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Consulta propiedades disponibles. Usa cuando tengas: tipo + zona + presupuesto.',
+    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto.',
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Búsqueda (ej: "terrenos Zapopan 2 millones")' }
+        tipo: { type: 'string', description: 'Tipo de propiedad (casa, terreno, etc.)' },
+        zona: { type: 'string', description: 'Zona o ciudad' },
+        presupuesto: { type: 'string', description: 'Presupuesto del cliente' }
       },
-      required: ['query']
+      required: ['tipo', 'zona', 'presupuesto']
     }
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda visita cuando el cliente CONFIRME interés en una propiedad específica.',
+    description: 'Agenda una visita a una propiedad cuando el cliente confirme interés.',
     input_schema: {
       type: 'object',
       properties: {
         resumen: { type: 'string' },
-        fecha: { type: 'string', description: 'YYYY-MM-DD' },
-        hora_inicio: { type: 'string', description: 'HH:MM' },
+        fecha: { type: 'string', description: 'Formato: YYYY-MM-DD' },
+        hora_inicio: { type: 'string', description: 'Formato: HH:MM' },
         duracion_minutos: { type: 'number' }
       },
       required: ['resumen', 'fecha', 'hora_inicio']
@@ -300,7 +415,12 @@ const tools = [
   }
 ];
 
-async function consultarDocumentos({ query }) {
+// ============================================================================
+// EJECUTAR HERRAMIENTA: CONSULTAR DOCUMENTOS
+// ============================================================================
+async function consultarDocumentos({ tipo, zona, presupuesto }) {
+  log('🔍', 'Consultando documentos', { tipo, zona, presupuesto });
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/documents.readonly']);
     const docs = google.docs({ version: 'v1', auth });
@@ -316,70 +436,23 @@ async function consultarDocumentos({ query }) {
       }
     });
 
-    return { success: true, content: fullText, query };
+    return { 
+      success: true, 
+      content: fullText,
+      busqueda: { tipo, zona, presupuesto }
+    };
   } catch (error) {
-    console.error('Error docs:', error);
+    log('❌', 'Error en consultar_documentos', { error: error.message });
     return { success: false, error: error.message };
   }
 }
 
-async function obtenerHistorialConversacion(telefono, limite = 10, excluirUltimoMensaje = true) {
-  try {
-    const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Mensajes!A:E'
-    });
-
-    const rows = response.data.values || [];
-
-    let mensajesCliente = rows
-      .filter(row => row[1] === telefono && row[3]);
-
-    // Excluir el último mensaje (el que acabamos de guardar)
-    if (excluirUltimoMensaje && mensajesCliente.length > 0) {
-      mensajesCliente = mensajesCliente.slice(0, -1);
-    }
-
-    // Tomar los últimos N mensajes
-    mensajesCliente = mensajesCliente.slice(-limite);
-
-    console.log(`📚 Cargando ${mensajesCliente.length} mensajes del historial para ${telefono}`);
-
-    return mensajesCliente.map(row => ({
-      direccion: row[2],
-      mensaje: row[3]
-    }));
-  } catch (error) {
-    console.error('Error historial:', error);
-    return [];
-  }
-}
-
-async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }) {
-  try {
-    const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    const timestamp = DateTime.now().setZone('America/Mexico_City').toFormat('yyyy-MM-dd HH:mm:ss');
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: 'Mensajes!A:E',
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[timestamp, telefono, direccion, mensaje, messageId || '']] }
-    });
-    return { success: true };
-  } catch (error) {
-    console.error('Error guardar:', error);
-    return { success: false };
-  }
-}
-
+// ============================================================================
+// EJECUTAR HERRAMIENTA: AGENDAR CITA
+// ============================================================================
 async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 }) {
+  log('📅', 'Agendando cita', { resumen, fecha, hora_inicio });
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar']);
     const calendar = google.calendar({ version: 'v3', auth });
@@ -388,165 +461,225 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     const [year, month, day] = fecha.split('-').map(Number);
     const [horas, minutos] = hora_inicio.split(':').map(Number);
 
-    const inicio = DateTime.fromObject({ year, month, day, hour: horas, minute: minutos }, { zone: 'America/Mexico_City' });
+    const inicio = DateTime.fromObject(
+      { year, month, day, hour: horas, minute: minutos }, 
+      { zone: CONFIG.TIMEZONE }
+    );
     const fin = inicio.plus({ minutes: duracion_minutos });
 
     const result = await calendar.events.insert({
       calendarId,
       requestBody: {
         summary: resumen,
-        start: { dateTime: inicio.toISO(), timeZone: 'America/Mexico_City' },
-        end: { dateTime: fin.toISO(), timeZone: 'America/Mexico_City' }
+        start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
+        end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE }
       }
     });
 
     return { success: true, eventLink: result.data.htmlLink };
   } catch (error) {
-    console.error('Error cita:', error);
+    log('❌', 'Error en agendar_cita', { error: error.message });
     return { success: false, error: error.message };
   }
 }
 
+// ============================================================================
+// CONSTRUIR MENSAJES PARA CLAUDE (con alternancia correcta)
+// ============================================================================
+function construirMensajesParaClaude(historial, mensajeActual, estado) {
+  let messages = [];
+  
+  // Agregar historial previo con alternancia correcta
+  if (historial.length > 0) {
+    let lastRole = null;
+    
+    for (const msg of historial) {
+      const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
+      const contenido = msg.mensaje?.trim();
+      
+      if (!contenido) continue;
+      
+      // Fusionar mensajes consecutivos del mismo rol
+      if (role === lastRole && messages.length > 0) {
+        messages[messages.length - 1].content += '\n' + contenido;
+      } else {
+        messages.push({ role, content: contenido });
+        lastRole = role;
+      }
+    }
+    
+    // Asegurar que termine en 'assistant' para que el nuevo 'user' alterne
+    while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      messages.pop();
+    }
+  }
+  
+  // Agregar mensaje actual con contexto de estado
+  const tipo = estado.tipo_propiedad || 'NO_DEFINIDO';
+  const zona = estado.zona || 'NO_DEFINIDO';
+  const presupuesto = estado.presupuesto || 'NO_DEFINIDO';
+  
+  const mensajeConContexto = `[Estado actual del cliente: tipo=${tipo}, zona=${zona}, presupuesto=${presupuesto}]
+
+Mensaje del cliente: ${mensajeActual}`;
+  
+  messages.push({ role: 'user', content: mensajeConContexto });
+  
+  return messages;
+}
+
+// ============================================================================
+// HANDLER PRINCIPAL
+// ============================================================================
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { Body, From, MessageSid } = req.body;
-  if (!Body || !From) return res.status(400).json({ error: 'Faltan params' });
+  
+  if (!Body || !From) {
+    return res.status(400).json({ error: 'Faltan parámetros Body o From' });
+  }
 
-  const telefono = From.replace('whatsapp:', '');
-  console.log('📨 Mensaje de', telefono, ':', Body);
+  const telefono = normalizarTelefono(From);
+  
+  log('═══════════════════════════════════════════════════════════════');
+  log('📨', `NUEVO MENSAJE de ${telefono}`);
+  log('📝', `Contenido: "${Body}"`);
+  log('═══════════════════════════════════════════════════════════════');
 
-  await guardarMensajeEnSheet({ telefono, direccion: 'inbound', mensaje: Body, messageId: MessageSid });
+  // Guardar mensaje entrante
+  await guardarMensajeEnSheet({ 
+    telefono, 
+    direccion: 'inbound', 
+    mensaje: Body, 
+    messageId: MessageSid 
+  });
 
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // 1. Obtener estado actual del cliente
-    const estadoOriginal = await obtenerEstadoConversacion(telefono);
-    console.log('📋 Estado antes de detección:', JSON.stringify(estadoOriginal));
+    // 1. Obtener estado actual
+    log('📖', 'PASO 1: Obteniendo estado del cliente...');
+    const estadoActual = await obtenerEstadoConversacion(telefono);
 
-    // 2. ⭐ DETECCIÓN AUTOMÁTICA: Analizar mensaje ANTES de llamar a Claude
-    const estadoActualizado = await detectarYActualizarEstado(
-      Body, 
-      telefono, 
-      estadoOriginal, 
-      guardarEstadoConversacion
-    );
-    console.log('🔍 Estado después de detección:', JSON.stringify(estadoActualizado));
+    // 2. Detectar datos en el mensaje actual
+    log('🔍', 'PASO 2: Detectando datos en mensaje...');
+    const datosDetectados = detectarDatosEnMensaje(Body);
+    log('🎯', 'Datos detectados', datosDetectados);
 
-    // 3. Obtener historial de conversación
-    const historial = await obtenerHistorialConversacion(telefono, 10, true);
-
-    // 4. Construir mensajes para Claude con alternancia correcta
-    let messages = [];
-
-    if (historial.length > 0) {
-      let lastRole = null;
-      
-      for (const msg of historial) {
-        const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
-        const contenido = limpiarRespuesta(msg.mensaje);
-        
-        if (!contenido) continue;
-        
-        // Si es el mismo rol que el anterior, fusionar mensajes
-        if (role === lastRole && messages.length > 0) {
-          messages[messages.length - 1].content += '\n' + contenido;
-        } else {
-          messages.push({ role, content: contenido });
-          lastRole = role;
-        }
-      }
-
-      // Asegurar que el último mensaje del historial sea 'assistant'
-      // para que el nuevo 'user' alterne correctamente
-      while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-        messages.pop();
-      }
+    // 3. Actualizar estado con datos detectados
+    const estadoActualizado = actualizarEstadoConDatos(estadoActual, datosDetectados);
+    
+    // Si hay cambios, guardar inmediatamente
+    if (Object.keys(datosDetectados).length > 0) {
+      log('💾', 'PASO 3: Guardando estado actualizado...');
+      await guardarEstadoConversacion(estadoActualizado);
     }
-
-    // 5. INYECCIÓN DE ESTADO EN MENSAJE (técnica de grounding de Anthropic)
-    // El estado SIEMPRE va en el mensaje para que Claude no lo ignore
-    const tipo = estadoActualizado.tipo_propiedad || 'NO_TIENE';
-    const zona = estadoActualizado.zona || 'NO_TIENE';
-    const presupuesto = estadoActualizado.presupuesto || 'NO_TIENE';
     
-    // Calcular qué falta
-    let faltantes = [];
-    if (tipo === 'NO_TIENE') faltantes.push('tipo');
-    if (zona === 'NO_TIENE') faltantes.push('zona');
-    if (presupuesto === 'NO_TIENE') faltantes.push('presupuesto');
-    
-    const mensajeConEstado = `[ESTADO_CLIENTE]
-Tipo: ${tipo}
-Zona: ${zona}
-Presupuesto: ${presupuesto}
-Faltan: ${faltantes.length > 0 ? faltantes.join(', ') : 'NINGUNO - BUSCAR PROPIEDADES'}
-[/ESTADO_CLIENTE]
+    log('📋', 'Estado final', estadoActualizado);
 
-Cliente dice: ${Body}`;
-    
-    console.log('📎 Mensaje con estado inyectado:', mensajeConEstado);
-    
-    messages.push({ role: 'user', content: mensajeConEstado });
+    // 4. Obtener historial
+    log('📚', 'PASO 4: Obteniendo historial...');
+    const historial = await obtenerHistorialConversacion(telefono);
 
-    // 6. Construir prompt con estado YA ACTUALIZADO
-    const systemPrompt = construirPromptConEstado(estadoActualizado);
+    // 5. Construir mensajes para Claude
+    log('🔧', 'PASO 5: Construyendo mensajes para Claude...');
+    const messages = construirMensajesParaClaude(historial, Body, estadoActualizado);
+    log('📝', `Mensajes construidos: ${messages.length}`);
+    log('📝', 'Roles: ' + messages.map(m => m.role).join(' → '));
 
-    console.log(`💬 Enviando ${messages.length} mensajes a Claude`);
-    console.log('📝 Roles:', messages.map(m => m.role).join(' → '));
-    console.log('📊 Estado enviado:', JSON.stringify(estadoActualizado));
+    // 6. Construir system prompt
+    const systemPrompt = construirSystemPrompt(estadoActualizado);
+    log('📋', 'System prompt construido');
 
     // 7. Llamar a Claude
+    log('🤖', 'PASO 6: Llamando a Claude...');
     let response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 500,
+      model: CONFIG.MODEL,
+      max_tokens: CONFIG.MAX_TOKENS,
       system: systemPrompt,
       tools,
       messages
     });
 
     // 8. Procesar tool calls si las hay
-    while (response.stop_reason === 'tool_use') {
+    let iteraciones = 0;
+    const MAX_ITERACIONES = 3;
+    
+    while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
+      iteraciones++;
       const toolUse = response.content.find(b => b.type === 'tool_use');
+      
       if (!toolUse) break;
 
-      console.log('🔧 Tool:', toolUse.name);
-      let toolResult = toolUse.name === 'consultar_documentos'
-        ? await consultarDocumentos(toolUse.input)
-        : await agendarCita(toolUse.input);
+      log('🔧', `Tool call #${iteraciones}: ${toolUse.name}`, toolUse.input);
+      
+      let toolResult;
+      if (toolUse.name === 'consultar_documentos') {
+        toolResult = await consultarDocumentos(toolUse.input);
+      } else if (toolUse.name === 'agendar_cita') {
+        toolResult = await agendarCita(toolUse.input);
+      } else {
+        toolResult = { error: 'Tool no reconocida' };
+      }
 
       messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(toolResult) }] });
+      messages.push({ 
+        role: 'user', 
+        content: [{ 
+          type: 'tool_result', 
+          tool_use_id: toolUse.id, 
+          content: JSON.stringify(toolResult) 
+        }] 
+      });
 
       response = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 500,
+        model: CONFIG.MODEL,
+        max_tokens: CONFIG.MAX_TOKENS,
         system: systemPrompt,
         tools,
         messages
       });
     }
 
-    // 9. Obtener respuesta final
-    const respuestaCompleta = response.content.find(b => b.type === 'text')?.text || 'Error generando respuesta';
-    const respuestaLimpia = limpiarRespuesta(respuestaCompleta);
+    // 9. Extraer respuesta final
+    const respuestaTexto = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
     // 10. Enviar por WhatsApp
+    log('📤', 'PASO 7: Enviando respuesta por WhatsApp...');
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
       to: From,
-      body: respuestaLimpia
+      body: respuestaTexto
     });
 
     // 11. Guardar respuesta en historial
-    await guardarMensajeEnSheet({ telefono, direccion: 'outbound', mensaje: respuestaLimpia, messageId: twilioMsg.sid });
+    await guardarMensajeEnSheet({ 
+      telefono, 
+      direccion: 'outbound', 
+      mensaje: respuestaTexto, 
+      messageId: twilioMsg.sid 
+    });
 
-    console.log('✅ Respuesta enviada');
+    log('✅', 'PROCESO COMPLETADO EXITOSAMENTE');
+    log('═══════════════════════════════════════════════════════════════');
+    
     return res.status(200).json({ success: true });
+
   } catch (error) {
-    console.error('❌ Error:', error);
+    log('❌', 'ERROR CRÍTICO', { 
+      message: error.message, 
+      stack: error.stack?.substring(0, 500) 
+    });
     return res.status(500).json({ error: error.message });
   }
 }
