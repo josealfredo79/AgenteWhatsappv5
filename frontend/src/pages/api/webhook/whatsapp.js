@@ -96,7 +96,7 @@ async function obtenerEstadoConversacion(telefono) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Estados!A:G'
+      range: 'Estados!A:L'  // Ampliado para más campos de seguimiento
     });
 
     const rows = response.data.values || [];
@@ -125,7 +125,13 @@ async function obtenerEstadoConversacion(telefono) {
         presupuesto: estadoRow[3] || '',
         etapa: estadoRow[4] || 'inicial',
         resumen: estadoRow[5] || '',
-        ultima_actualizacion: estadoRow[6] || ''
+        ultima_actualizacion: estadoRow[6] || '',
+        // Nuevos campos de seguimiento
+        nombre_cliente: estadoRow[7] || '',
+        fecha_cita: estadoRow[8] || '',
+        propiedad_interes: estadoRow[9] || '',
+        primer_contacto: estadoRow[10] || '',
+        notas: estadoRow[11] || ''
       };
       log('✅', 'Estado encontrado', estado);
       return estado;
@@ -139,7 +145,12 @@ async function obtenerEstadoConversacion(telefono) {
       presupuesto: '',
       etapa: 'inicial',
       resumen: '',
-      ultima_actualizacion: ''
+      ultima_actualizacion: '',
+      nombre_cliente: '',
+      fecha_cita: '',
+      propiedad_interes: '',
+      primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
+      notas: ''
     };
   } catch (error) {
     log('❌', 'Error al obtener estado', { error: error.message });
@@ -150,7 +161,12 @@ async function obtenerEstadoConversacion(telefono) {
       presupuesto: '',
       etapa: 'inicial',
       resumen: '',
-      ultima_actualizacion: ''
+      ultima_actualizacion: '',
+      nombre_cliente: '',
+      fecha_cita: '',
+      propiedad_interes: '',
+      primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
+      notas: ''
     };
   }
 }
@@ -179,21 +195,28 @@ async function guardarEstadoConversacion(estado) {
     });
 
     const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
+    
+    // Datos ampliados para seguimiento (12 columnas: A-L)
     const rowData = [
-      telefonoNormalizado,
-      estado.tipo_propiedad || '',
-      estado.zona || '',
-      estado.presupuesto || '',
-      estado.etapa || 'inicial',
-      estado.resumen || '',
-      timestamp
+      telefonoNormalizado,                                    // A: Teléfono
+      estado.tipo_propiedad || '',                            // B: Tipo de propiedad
+      estado.zona || '',                                      // C: Zona
+      estado.presupuesto || '',                               // D: Presupuesto
+      estado.etapa || 'inicial',                              // E: Etapa
+      estado.resumen || '',                                   // F: Resumen
+      timestamp,                                              // G: Última actualización
+      estado.nombre_cliente || '',                            // H: Nombre del cliente
+      estado.fecha_cita || '',                                // I: Fecha de cita agendada
+      estado.propiedad_interes || '',                         // J: Propiedad de interés
+      estado.primer_contacto || timestamp.split(' ')[0],      // K: Primer contacto
+      estado.notas || ''                                      // L: Notas adicionales
     ];
 
     if (rowIndex > -1) {
       log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Estados!A${rowIndex + 1}:G${rowIndex + 1}`,
+        range: `Estados!A${rowIndex + 1}:L${rowIndex + 1}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -201,7 +224,7 @@ async function guardarEstadoConversacion(estado) {
       log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Estados!A:G',
+        range: 'Estados!A:L',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -297,6 +320,13 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
 function detectarDatosEnMensaje(mensaje) {
   const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let datos = {};
+  
+  // DETECTAR NOMBRE DEL CLIENTE
+  const matchNombre = mensaje.match(/(?:me llamo|soy|mi nombre es)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/i);
+  if (matchNombre) {
+    datos.nombre_cliente = matchNombre[1].trim();
+    log('👤', `Nombre detectado: ${datos.nombre_cliente}`);
+  }
   
   // DETECTAR CAMBIO DE OPINIÓN
   const quiereCambiar = 
@@ -472,7 +502,9 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     tipo_propiedad: tipoFinal,
     zona: zonaFinal,
     presupuesto: presupuestoFinal,
-    etapa: nuevaEtapa
+    etapa: nuevaEtapa,
+    // Agregar nombre si se detectó
+    nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
   };
   
   log('📋', 'Estado actualizado', { 
@@ -963,6 +995,7 @@ export default async function handler(req, res) {
     // 10. Procesar tool calls si las hay
     let iteraciones = 0;
     const MAX_ITERACIONES = 3;
+    let citaAgendadaInfo = null;  // Para guardar info de la cita
     
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
@@ -977,6 +1010,14 @@ export default async function handler(req, res) {
         toolResult = await consultarDocumentos(toolUse.input);
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
+        // Guardar info de la cita para actualizar estado después
+        if (toolResult.success) {
+          citaAgendadaInfo = {
+            fecha: toolUse.input.fecha,
+            hora: toolUse.input.hora_inicio,
+            propiedad: toolUse.input.resumen
+          };
+        }
       } else {
         toolResult = { error: 'Tool no reconocida' };
       }
@@ -1009,13 +1050,14 @@ export default async function handler(req, res) {
 
     log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
-    // 10. Detectar si hubo cita agendada y actualizar estado
-    const huboToolUse = response.content.some(b => b.type === 'tool_use' && b.name === 'agendar_cita');
-    if (huboToolUse) {
+    // 10. Detectar si hubo cita agendada y actualizar estado con TODOS los datos
+    if (citaAgendadaInfo) {
       estadoActualizado.etapa = 'cita_agendada';
-      estadoActualizado.ultima_interaccion = new Date().toISOString();
+      estadoActualizado.fecha_cita = `${citaAgendadaInfo.fecha} ${citaAgendadaInfo.hora}`;
+      estadoActualizado.propiedad_interes = citaAgendadaInfo.propiedad;
+      estadoActualizado.notas = `Cita confirmada el ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('dd/MM/yyyy HH:mm')}`;
       await guardarEstadoConversacion(estadoActualizado);
-      log('📅', 'Estado actualizado: cita_agendada');
+      log('📅', 'Estado actualizado: cita_agendada con fecha:', citaAgendadaInfo);
     }
     
     // 11. Detectar cambio de etapa basado en la respuesta
