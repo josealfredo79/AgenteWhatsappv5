@@ -442,6 +442,30 @@ function detectarDatosEnMensaje(mensaje) {
     log('👆', 'Detectado: cliente mostró interés en opción específica');
   }
 
+  // DETECTAR PREGUNTA POR CITA EXISTENTE
+  if (/\b(mi cita|la cita|cuando|a que hora|confirmame|confirmar|recordar|recordatorio)\b/i.test(mensajeLower)) {
+    datos.pregunta_cita = true;
+    log('📋', 'Detectado: cliente pregunta por su cita');
+  }
+
+  // DETECTAR QUIERE REAGENDAR
+  if (/\b(cambiar|mover|reagendar|otra fecha|otro dia|otro día|posponer|adelantar)\s*(la cita|cita|fecha|hora)?\b/i.test(mensajeLower)) {
+    datos.quiere_reagendar = true;
+    log('🔄', 'Detectado: cliente quiere reagendar');
+  }
+
+  // DETECTAR FEEDBACK POST-CITA
+  if (/\b(me fue|estuvo|gusto|gustó|excelente|bien|mal|no me|si me|la visita fue|fui a ver)\b/i.test(mensajeLower)) {
+    datos.da_feedback = true;
+    log('⭐', 'Detectado: cliente da feedback');
+  }
+
+  // DETECTAR QUIERE NUEVA BÚSQUEDA (cliente recurrente)
+  if (/\b(otra propiedad|otro terreno|otra casa|algo diferente|busco ahora|necesito otro|tienes algo)\b/i.test(mensajeLower)) {
+    datos.nueva_busqueda = true;
+    log('🔍', 'Detectado: cliente quiere nueva búsqueda');
+  }
+
   return datos;
 }
 
@@ -481,6 +505,42 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       presupuesto: presupuestoFinal,
       etapa: nuevaEtapa,
       cambio_opinion: true
+    };
+    return estadoNuevo;
+  }
+  
+  // CLIENTE CON CITA AGENDADA - Manejar diferentes intenciones
+  if (estadoActual.etapa === 'cita_agendada') {
+    log('📋', 'Cliente con cita agendada, analizando intención...');
+    
+    if (datosNuevos.quiere_reagendar) {
+      // Quiere cambiar la cita → volver a esperando_fecha
+      nuevaEtapa = 'esperando_fecha';
+      log('📊', 'Reagendando. Etapa: esperando_fecha');
+    } else if (datosNuevos.nueva_busqueda || datosNuevos.tipo_propiedad) {
+      // Quiere buscar otra propiedad → nueva búsqueda
+      nuevaEtapa = 'busqueda';
+      // Limpiar datos anteriores si quiere algo completamente nuevo
+      if (datosNuevos.tipo_propiedad && datosNuevos.tipo_propiedad !== estadoActual.tipo_propiedad) {
+        tipoFinal = datosNuevos.tipo_propiedad;
+        zonaFinal = datosNuevos.zona || '';
+        presupuestoFinal = datosNuevos.presupuesto || '';
+      }
+      log('📊', 'Nueva búsqueda. Etapa: busqueda');
+    } else if (datosNuevos.pregunta_cita || datosNuevos.da_feedback) {
+      // Solo pregunta por cita o da feedback → mantener etapa
+      nuevaEtapa = 'cita_agendada';
+      log('📊', 'Consulta sobre cita existente. Etapa: cita_agendada');
+    }
+    // Si no detectamos intención específica, mantener cita_agendada
+    
+    const estadoNuevo = {
+      ...estadoActual,
+      tipo_propiedad: tipoFinal,
+      zona: zonaFinal,
+      presupuesto: presupuestoFinal,
+      etapa: nuevaEtapa,
+      nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
     };
     return estadoNuevo;
   }
@@ -659,6 +719,49 @@ Estás esperando que el cliente dé fecha/hora.
 Cuando la dé, USA "agendar_cita" inmediatamente.
 Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
 "pasado mañana" = ${ahora.plus({ days: 2 }).toFormat('yyyy-MM-dd')}
+</accion_requerida>`;
+  } else if (etapa === 'cita_agendada') {
+    // Calcular días desde la cita
+    const fechaCita = estado.fecha_cita ? DateTime.fromFormat(estado.fecha_cita.split(' ')[0], 'yyyy-MM-dd', { zone: CONFIG.TIMEZONE }) : null;
+    const diasDesdeCita = fechaCita ? Math.floor(ahora.diff(fechaCita, 'days').days) : 0;
+    
+    instruccionEspecifica = `
+<accion_requerida>
+Este cliente YA TIENE UNA CITA AGENDADA.
+Cita: ${estado.fecha_cita || 'fecha no registrada'}
+Propiedad: ${estado.propiedad_interes || 'no especificada'}
+Días desde la cita: ${diasDesdeCita}
+
+COMPORTAMIENTO según lo que diga el cliente:
+
+📋 SI PREGUNTA POR SU CITA:
+→ "Tu cita está programada para ${estado.fecha_cita}. ¿Necesitas cambiarla?"
+
+🔄 SI QUIERE REAGENDAR:
+→ "¡Claro! ¿Qué nueva fecha y hora te funcionaría?"
+
+⭐ SI PREGUNTA CÓMO LE FUE / DA FEEDBACK:
+→ Agradece el feedback
+→ Pregunta si quiere ver otra propiedad o agendar otra visita
+
+🏠 SI PREGUNTA POR OTRA PROPIEDAD:
+→ "¡Con gusto! ¿Qué tipo de propiedad te interesa ahora?"
+→ Inicia nueva búsqueda (el sistema actualizará la etapa)
+
+👋 SI SOLO SALUDA:
+→ "¡Hola de nuevo! 😊 ¿Es sobre tu cita del ${estado.fecha_cita} o te interesa ver otras propiedades?"
+</accion_requerida>`;
+  } else if (etapa === 'seguimiento') {
+    instruccionEspecifica = `
+<accion_requerida>
+Este es un cliente de SEGUIMIENTO (ya tuvo interacción previa hace días).
+Historial: ${estado.notas || 'sin notas'}
+
+Tu objetivo:
+1. Saluda cordialmente recordando que ya platicaron
+2. Pregunta si sigue interesado o busca algo diferente
+3. Si quiere lo mismo → usa consultar_documentos
+4. Si quiere algo nuevo → pregunta qué busca ahora
 </accion_requerida>`;
   }
 
@@ -954,6 +1057,24 @@ export default async function handler(req, res) {
     if (sesionExpirada(estadoActual.ultima_actualizacion) && estadoActual.tipo_propiedad) {
       log('⏰', 'Sesión expirada, reseteando estado automáticamente');
       estadoActual = await resetearEstadoCliente(telefono);
+    }
+    
+    // 2.5 Verificar cliente inactivo para seguimiento (7+ días sin interacción)
+    const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
+    if (estadoActual.ultima_actualizacion && estadoActual.etapa !== 'inicial') {
+      const ultimaInteraccion = DateTime.fromFormat(
+        estadoActual.ultima_actualizacion.split(' ')[0], 
+        'yyyy-MM-dd', 
+        { zone: CONFIG.TIMEZONE }
+      );
+      const diasInactivo = Math.floor(ahora.diff(ultimaInteraccion, 'days').days);
+      
+      if (diasInactivo >= 7 && estadoActual.etapa !== 'seguimiento') {
+        log('📅', `Cliente inactivo por ${diasInactivo} días. Cambiando a seguimiento.`);
+        estadoActual.etapa = 'seguimiento';
+        estadoActual.notas = `${estadoActual.notas || ''} | Inactivo ${diasInactivo} días - ${ahora.toFormat('dd/MM/yyyy')}`;
+        await guardarEstadoConversacion(estadoActual);
+      }
     }
 
     // 3. Procesar comandos especiales
