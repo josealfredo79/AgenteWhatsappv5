@@ -45,8 +45,17 @@ function getGoogleAuth(scopes) {
   const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE ||
     path.join(process.cwd(), 'google-credentials.json');
 
+  log('🔑', `Buscando credenciales en: ${keyFile}`);
+  
+  if (!fs.existsSync(keyFile)) {
+    log('❌', `Archivo de credenciales NO existe: ${keyFile}`);
+    throw new Error(`Archivo de credenciales no encontrado: ${keyFile}`);
+  }
+
   const credentialsRaw = fs.readFileSync(keyFile, 'utf8');
   const credentials = JSON.parse(credentialsRaw);
+  
+  log('✅', `Credenciales cargadas. Client email: ${credentials.client_email}`);
 
   if (credentials.private_key) {
     credentials.private_key = credentials.private_key
@@ -799,12 +808,23 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
 // EJECUTAR HERRAMIENTA: AGENDAR CITA
 // ============================================================================
 async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 }) {
-  log('📅', 'Agendando cita', { resumen, fecha, hora_inicio });
+  log('📅', '=== INICIANDO AGENDAR CITA ===');
+  log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos });
   
   try {
+    log('🔑', 'Obteniendo autenticación de Google...');
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar']);
+    
+    log('📅', 'Creando cliente de Calendar...');
     const calendar = google.calendar({ version: 'v3', auth });
+    
     const calendarId = process.env.GOOGLE_CALENDAR_ID;
+    log('📅', `Calendar ID: ${calendarId}`);
+    
+    if (!calendarId) {
+      log('❌', 'GOOGLE_CALENDAR_ID no está definido!');
+      return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
+    }
 
     const [year, month, day] = fecha.split('-').map(Number);
     const [horas, minutos] = hora_inicio.split(':').map(Number);
@@ -814,18 +834,26 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
       { zone: CONFIG.TIMEZONE }
     );
     const fin = inicio.plus({ minutes: duracion_minutos });
+    
+    log('📅', `Inicio: ${inicio.toISO()}, Fin: ${fin.toISO()}`);
 
+    const eventData = {
+      summary: resumen,
+      start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
+      end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE }
+    };
+    log('📅', 'Evento a crear:', eventData);
+
+    log('📅', 'Insertando evento en Google Calendar...');
     const result = await calendar.events.insert({
       calendarId,
-      requestBody: {
-        summary: resumen,
-        start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
-        end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE }
-      }
+      requestBody: eventData
     });
 
     const eventLink = result.data.htmlLink;
-    log('✅', 'Cita agendada exitosamente', { eventLink });
+    log('✅', '=== CITA AGENDADA EXITOSAMENTE ===');
+    log('✅', `Event ID: ${result.data.id}`);
+    log('✅', `Event Link: ${eventLink}`);
     
     return { 
       success: true, 
@@ -834,7 +862,9 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
       instruccion: 'DEBES incluir este link en tu respuesta al cliente para que pueda agregarlo a su calendario'
     };
   } catch (error) {
-    log('❌', 'Error en agendar_cita', { error: error.message });
+    log('❌', '=== ERROR EN AGENDAR CITA ===');
+    log('❌', `Error: ${error.message}`);
+    log('❌', `Stack: ${error.stack?.substring(0, 500)}`);
     return { success: false, error: error.message };
   }
 }
