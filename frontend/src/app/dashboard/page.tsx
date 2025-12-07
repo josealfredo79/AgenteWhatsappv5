@@ -193,7 +193,7 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: msg.to,
-          message: msg.body,
+          body: msg.body,
         }),
       });
       setMessages((prev) =>
