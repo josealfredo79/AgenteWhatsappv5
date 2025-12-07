@@ -809,7 +809,7 @@ Tu objetivo:
 </accion_requerida>`;
   }
 
-  return `Eres Ana, asesora inmobiliaria profesional de Terrenos Zapopan.
+  return `Eres Ana, asesora inmobiliaria profesional.
 Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 
 <perfil>
