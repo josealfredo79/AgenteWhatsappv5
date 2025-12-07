@@ -461,9 +461,21 @@ function detectarDatosEnMensaje(mensaje) {
   }
 
   // DETECTAR QUIERE NUEVA BÚSQUEDA (cliente recurrente)
-  if (/\b(otra propiedad|otro terreno|otra casa|algo diferente|busco ahora|necesito otro|tienes algo)\b/i.test(mensajeLower)) {
+  if (/\b(otra propiedad|otro terreno|otra casa|algo diferente|busco ahora|necesito otro|tienes algo|ver otra|deseo ver|quiero ver)\b/i.test(mensajeLower)) {
     datos.nueva_busqueda = true;
     log('🔍', 'Detectado: cliente quiere nueva búsqueda');
+  }
+
+  // DETECTAR QUIERE CAMBIAR ZONA (limpiar zona anterior)
+  if (/\b(otro lugar|otra zona|en otro|otro lado|diferente zona|otra ubicacion|otra ubicación|pero en)\b/i.test(mensajeLower)) {
+    datos.cambiar_zona = true;
+    log('📍', 'Detectado: cliente quiere cambiar zona');
+  }
+
+  // DETECTAR QUIERE CAMBIAR TIPO (limpiar tipo anterior)
+  if (/\b(pero quiero|mejor quiero|prefiero|en vez de|no terreno|no casa|quiero casas? no|quiero terrenos? no)\b/i.test(mensajeLower)) {
+    datos.cambiar_tipo = true;
+    log('🏠', 'Detectado: cliente quiere cambiar tipo de propiedad');
   }
 
   return datos;
@@ -479,6 +491,38 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
   let tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
   let zonaFinal = datosNuevos.zona || estadoActual.zona;
   let presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
+  
+  // NUEVA BÚSQUEDA COMPLETA - Limpiar todo y empezar de cero
+  if (datosNuevos.nueva_busqueda && !datosNuevos.tipo_propiedad && !datosNuevos.zona) {
+    log('🆕', 'Nueva búsqueda detectada - limpiando datos anteriores');
+    return {
+      ...estadoActual,
+      tipo_propiedad: '',
+      zona: '',
+      presupuesto: '',
+      etapa: 'inicial',
+      propiedad_interes: '',
+      fecha_cita: ''
+    };
+  }
+  
+  // CAMBIAR ZONA - Limpiar zona y volver a preguntar
+  if (datosNuevos.cambiar_zona && !datosNuevos.zona) {
+    log('📍', 'Cambio de zona detectado - limpiando zona anterior');
+    zonaFinal = '';  // Forzar a preguntar zona de nuevo
+    nuevaEtapa = 'busqueda';
+  }
+  
+  // CAMBIAR TIPO - Limpiar tipo y usar el nuevo si lo dio
+  if (datosNuevos.cambiar_tipo) {
+    log('🏠', 'Cambio de tipo detectado');
+    if (datosNuevos.tipo_propiedad) {
+      tipoFinal = datosNuevos.tipo_propiedad;
+    } else {
+      tipoFinal = '';  // Forzar a preguntar tipo de nuevo
+    }
+    nuevaEtapa = 'busqueda';
+  }
   
   // CAMBIO DE OPINIÓN - Retroceder etapa
   if (datosNuevos.cambio_opinion || datosNuevos.quiere_cancelar) {
