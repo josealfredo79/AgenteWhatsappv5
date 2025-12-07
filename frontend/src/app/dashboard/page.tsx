@@ -174,11 +174,15 @@ export default function Dashboard() {
 
   const handleSend = async () => {
     if (!input.trim() || !selected) return;
+    const destinatario = conversations.find((c) => c.id === selected)?.usuario || "";
+    
+    console.log('📤 [DASHBOARD] Enviando mensaje a:', destinatario);
+    
     const msg: Message = {
       messageId: `msg-${Date.now()}`,
       conversationId: selected,
       from: "Agente",
-      to: conversations.find((c) => c.id === selected)?.usuario || "",
+      to: destinatario,
       body: input,
       timestamp: Date.now(),
       status: 'sent',
@@ -188,7 +192,9 @@ export default function Dashboard() {
     socketRef.current?.emit("send-message", msg);
 
     try {
-      await fetch("/api/send-message", {
+      console.log('📤 [DASHBOARD] Llamando a /api/send-message con:', { to: msg.to, body: msg.body });
+      
+      const response = await fetch("/api/send-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,11 +202,22 @@ export default function Dashboard() {
           body: msg.body,
         }),
       });
-      setMessages((prev) =>
-        prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'delivered' } : m))
-      );
+      
+      const result = await response.json();
+      console.log('📤 [DASHBOARD] Respuesta del servidor:', result);
+      
+      if (response.ok) {
+        setMessages((prev) =>
+          prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'delivered' } : m))
+        );
+      } else {
+        console.error('❌ [DASHBOARD] Error del servidor:', result);
+        setMessages((prev) =>
+          prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'sent' } : m))
+        );
+      }
     } catch (err) {
-      console.error("Error enviando mensaje:", err);
+      console.error("❌ [DASHBOARD] Error enviando mensaje:", err);
     }
 
     setInput("");
