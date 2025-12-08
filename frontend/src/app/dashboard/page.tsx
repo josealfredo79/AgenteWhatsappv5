@@ -13,7 +13,14 @@ interface Message {
   to: string;
   body: string;
   timestamp: number;
-  status?: 'sent' | 'delivered' | 'read';
+  status?: 'sent' | 'delivered' | 'read' | 'failed';
+  errorMsg?: string;
+}
+
+interface Toast {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  message: string;
 }
 
 interface Conversation {
@@ -37,9 +44,20 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [typing, setTyping] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [sending, setSending] = useState(false);
   const socketRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<string | null>(null);
+
+  // Función para mostrar toast
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -173,10 +191,11 @@ export default function Dashboard() {
   }, [selected, auth]);
 
   const handleSend = async () => {
-    if (!input.trim() || !selected) return;
+    if (!input.trim() || !selected || sending) return;
     const destinatario = conversations.find((c) => c.id === selected)?.usuario || "";
     
     console.log('📤 [DASHBOARD] Enviando mensaje a:', destinatario);
+    setSending(true);
     
     const msg: Message = {
       messageId: `msg-${Date.now()}`,
@@ -189,6 +208,7 @@ export default function Dashboard() {
     };
 
     setMessages((prev) => [...prev, msg]);
+    setInput("");
     socketRef.current?.emit("send-message", msg);
 
     try {
@@ -210,17 +230,23 @@ export default function Dashboard() {
         setMessages((prev) =>
           prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'delivered' } : m))
         );
+        showToast('success', '✅ Mensaje enviado correctamente');
       } else {
         console.error('❌ [DASHBOARD] Error del servidor:', result);
         setMessages((prev) =>
-          prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'sent' } : m))
+          prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'failed', errorMsg: result.error } : m))
         );
+        showToast('error', `❌ ${result.error || 'Error al enviar mensaje'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ [DASHBOARD] Error enviando mensaje:", err);
+      setMessages((prev) =>
+        prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'failed', errorMsg: 'Error de conexión' } : m))
+      );
+      showToast('error', '❌ Error de conexión al enviar');
+    } finally {
+      setSending(false);
     }
-
-    setInput("");
   };
 
   const getInitials = (name: string) => {
@@ -824,26 +850,48 @@ export default function Dashboard() {
                     >
                       <div
                         style={{
-                          background: m.from === "Agente" ? "#005C4B" : "#202C33",
+                          background: m.from === "Agente" 
+                            ? (m.status === 'failed' ? "#5c2b2b" : "#005C4B") 
+                            : "#202C33",
                           borderRadius: 8,
                           padding: "8px 12px",
                           maxWidth: 540,
                           boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
                           position: "relative",
+                          border: m.status === 'failed' ? "1px solid #ff6b6b" : "none",
                         }}
                       >
                         <div style={{ color: "#E9EDEF", fontSize: 14, lineHeight: "19px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           {m.body}
                         </div>
+                        {m.status === 'failed' && m.errorMsg && (
+                          <div style={{ color: "#ff6b6b", fontSize: 11, marginTop: 4 }}>
+                            ⚠️ {m.errorMsg}
+                          </div>
+                        )}
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 4 }}>
                           <span style={{ fontSize: 11, color: "#8696A0" }}>
                             {new Date(m.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           {m.from === "Agente" && (
-                            <svg width="16" height="11" fill="#53BDEB" viewBox="0 0 16 11">
-                              <path d="M11.071.653a.75.75 0 10-1.142.972l4.243 4.993L9.93 11.61a.75.75 0 001.142.972l5-5.885a.75.75 0 000-.972l-5-5.072z" />
-                              <path d="M5.071.653a.75.75 0 00-1.142.972l4.243 4.993L3.93 11.61a.75.75 0 101.142.972l5-5.885a.75.75 0 000-.972L5.07.653z" />
-                            </svg>
+                            <>
+                              {m.status === 'sent' && (
+                                <svg width="16" height="11" fill="#8696A0" viewBox="0 0 16 11" title="Enviando...">
+                                  <path d="M11.071.653a.75.75 0 10-1.142.972l4.243 4.993L9.93 11.61a.75.75 0 001.142.972l5-5.885a.75.75 0 000-.972l-5-5.072z" />
+                                </svg>
+                              )}
+                              {m.status === 'delivered' && (
+                                <svg width="16" height="11" fill="#53BDEB" viewBox="0 0 16 11" title="Entregado">
+                                  <path d="M11.071.653a.75.75 0 10-1.142.972l4.243 4.993L9.93 11.61a.75.75 0 001.142.972l5-5.885a.75.75 0 000-.972l-5-5.072z" />
+                                  <path d="M5.071.653a.75.75 0 00-1.142.972l4.243 4.993L3.93 11.61a.75.75 0 101.142.972l5-5.885a.75.75 0 000-.972L5.07.653z" />
+                                </svg>
+                              )}
+                              {m.status === 'failed' && (
+                                <svg width="16" height="16" fill="#ff6b6b" viewBox="0 0 24 24" title="Error al enviar">
+                                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                                </svg>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -883,8 +931,8 @@ export default function Dashboard() {
                 <button
                   onClick={handleSend}
                   style={{
-                    background: input.trim() ? "#25D366" : "transparent",
-                    color: input.trim() ? "#fff" : "#8696A0",
+                    background: sending ? "#1a8f4a" : (input.trim() ? "#25D366" : "transparent"),
+                    color: input.trim() || sending ? "#fff" : "#8696A0",
                     border: "none",
                     borderRadius: "50%",
                     width: 48,
@@ -892,14 +940,23 @@ export default function Dashboard() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    cursor: input.trim() ? "pointer" : "default",
+                    cursor: (input.trim() && !sending) ? "pointer" : "default",
                     transition: "all 0.2s",
+                    opacity: sending ? 0.7 : 1,
                   }}
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || sending}
+                  title={sending ? "Enviando..." : "Enviar mensaje"}
                 >
-                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
-                  </svg>
+                  {sending ? (
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" opacity=".3"/>
+                      <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z"/>
+                    </svg>
+                  ) : (
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                    </svg>
+                  )}
                 </button>
               </footer>
             </>
@@ -923,6 +980,52 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* Toast Notifications */}
+      <div style={{
+        position: 'fixed',
+        top: 20,
+        right: 20,
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              padding: '12px 20px',
+              borderRadius: 8,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 500,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              animation: 'slideIn 0.3s ease-out',
+              maxWidth: 350,
+              background: toast.type === 'success' 
+                ? 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)' 
+                : toast.type === 'error' 
+                  ? 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)'
+                  : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+            }}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
+
+      {/* CSS Animations */}
+      <style jsx global>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes slideIn {
+          0% { transform: translateX(100%); opacity: 0; }
+          100% { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </>
   );
 }
