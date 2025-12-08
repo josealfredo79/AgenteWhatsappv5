@@ -940,13 +940,93 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
       }
     });
 
+    // Extraer URLs de imágenes del documento
+    const imagenesExtraidas = extraerImagenesDeTexto(fullText);
+    log('🖼️', `Imágenes encontradas: ${imagenesExtraidas.length}`);
+
     return { 
       success: true, 
       content: fullText,
+      imagenes: imagenesExtraidas,
       busqueda: { tipo, zona, presupuesto }
     };
   } catch (error) {
     log('❌', 'Error en consultar_documentos', { error: error.message });
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// EXTRAER URLs DE IMÁGENES DEL TEXTO
+// ============================================================================
+function extraerImagenesDeTexto(texto) {
+  const imagenes = [];
+  
+  // Patrones para detectar URLs de imágenes
+  // Formato 1: IMAGEN: https://...
+  // Formato 2: Foto: https://...
+  // Formato 3: URLs directas de imágenes (.jpg, .jpeg, .png, .webp)
+  
+  const patronImagen = /(?:IMAGEN|FOTO|IMG|IMAGE):\s*(https?:\/\/[^\s]+)/gi;
+  const patronUrlDirecta = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))/gi;
+  const patronDrive = /(https?:\/\/drive\.google\.com\/[^\s]+)/gi;
+  
+  let match;
+  
+  // Buscar formato IMAGEN: url
+  while ((match = patronImagen.exec(texto)) !== null) {
+    const url = match[1].trim();
+    if (!imagenes.includes(url)) {
+      imagenes.push(url);
+      log('🖼️', `Imagen encontrada (etiqueta): ${url.substring(0, 50)}...`);
+    }
+  }
+  
+  // Buscar URLs directas de imágenes
+  while ((match = patronUrlDirecta.exec(texto)) !== null) {
+    const url = match[1].trim();
+    if (!imagenes.includes(url)) {
+      imagenes.push(url);
+      log('🖼️', `Imagen encontrada (URL directa): ${url.substring(0, 50)}...`);
+    }
+  }
+  
+  // Buscar URLs de Google Drive (convertir a formato directo)
+  while ((match = patronDrive.exec(texto)) !== null) {
+    let url = match[1].trim();
+    // Convertir URL de Drive a formato de vista directa
+    const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch) {
+      const fileId = driveMatch[1];
+      url = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      if (!imagenes.includes(url)) {
+        imagenes.push(url);
+        log('🖼️', `Imagen encontrada (Drive): ${url.substring(0, 50)}...`);
+      }
+    }
+  }
+  
+  return imagenes;
+}
+
+// ============================================================================
+// ENVIAR MENSAJE CON IMAGEN POR WHATSAPP
+// ============================================================================
+async function enviarMensajeConImagen(client, from, to, body, mediaUrl) {
+  try {
+    log('🖼️', `Enviando imagen: ${mediaUrl.substring(0, 50)}...`);
+    
+    const mensaje = await client.messages.create({
+      from: from,
+      to: to,
+      body: body || '',
+      mediaUrl: [mediaUrl]
+    });
+    
+    log('✅', `Imagen enviada exitosamente. SID: ${mensaje.sid}`);
+    return { success: true, sid: mensaje.sid };
+  } catch (error) {
+    log('❌', `Error enviando imagen: ${error.message}`);
     return { success: false, error: error.message };
   }
 }
@@ -1221,6 +1301,7 @@ export default async function handler(req, res) {
     let iteraciones = 0;
     const MAX_ITERACIONES = 3;
     let citaAgendadaInfo = null;  // Para guardar info de la cita
+    let imagenesParaEnviar = [];  // Para guardar imágenes encontradas
     
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
@@ -1233,6 +1314,11 @@ export default async function handler(req, res) {
       let toolResult;
       if (toolUse.name === 'consultar_documentos') {
         toolResult = await consultarDocumentos(toolUse.input);
+        // Guardar imágenes para enviar después
+        if (toolResult.success && toolResult.imagenes && toolResult.imagenes.length > 0) {
+          imagenesParaEnviar = toolResult.imagenes.slice(0, 3); // Máximo 3 imágenes
+          log('🖼️', `Imágenes a enviar: ${imagenesParaEnviar.length}`);
+        }
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
         // Guardar info de la cita para actualizar estado después
@@ -1299,11 +1385,44 @@ export default async function handler(req, res) {
     // 12. Enviar por WhatsApp
     log('📤', 'PASO 8: Enviando respuesta por WhatsApp...');
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    
+    // Primero enviar el mensaje de texto
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
       to: From,
       body: respuestaTexto
     });
+
+    // 12.5 Enviar imágenes si hay
+    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
+      log('🖼️', `Enviando ${imagenesParaEnviar.length} imágenes...`);
+      
+      for (let i = 0; i < imagenesParaEnviar.length; i++) {
+        const imgUrl = imagenesParaEnviar[i];
+        try {
+          // Pequeña pausa entre mensajes para evitar rate limiting
+          if (i > 0) await new Promise(resolve => setTimeout(resolve, 500));
+          
+          await enviarMensajeConImagen(
+            client,
+            'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
+            From,
+            '', // Sin texto adicional
+            imgUrl
+          );
+          
+          // Guardar en historial
+          await guardarMensajeEnSheet({ 
+            telefono, 
+            direccion: 'outbound', 
+            mensaje: `[IMAGEN: ${imgUrl}]`, 
+            messageId: '' 
+          });
+        } catch (imgError) {
+          log('⚠️', `Error enviando imagen ${i + 1}: ${imgError.message}`);
+        }
+      }
+    }
 
     // 13. Guardar respuesta en historial
     await guardarMensajeEnSheet({ 
