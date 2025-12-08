@@ -966,11 +966,23 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     const calendar = google.calendar({ version: 'v3', auth });
     
     const calendarId = process.env.GOOGLE_CALENDAR_ID;
-    log('📅', `Calendar ID: ${calendarId}`);
+    log('📅', `Calendar ID configurado: ${calendarId}`);
     
     if (!calendarId) {
       log('❌', 'GOOGLE_CALENDAR_ID no está definido!');
       return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
+    }
+
+    // DIAGNÓSTICO: Verificar acceso al calendario
+    try {
+      log('🔍', 'Verificando acceso al calendario...');
+      const calendarInfo = await calendar.calendars.get({ calendarId });
+      log('✅', `Calendario encontrado: "${calendarInfo.data.summary}" (ID: ${calendarInfo.data.id})`);
+      log('📋', `Zona horaria del calendario: ${calendarInfo.data.timeZone}`);
+      log('📋', `Acceso: ${calendarInfo.data.accessRole || 'no especificado'}`);
+    } catch (calError) {
+      log('⚠️', `Error al verificar calendario: ${calError.message}`);
+      log('⚠️', 'Esto puede indicar que el Service Account no tiene acceso al calendario');
     }
 
     const [year, month, day] = fecha.split('-').map(Number);
@@ -987,7 +999,9 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     const eventData = {
       summary: resumen,
       start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
-      end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE }
+      end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE },
+      // Agregar descripción para identificar el evento
+      description: `Cita agendada automáticamente por el Agente WhatsApp.\nFecha de creación: ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss')}`
     };
     log('📅', 'Evento a crear:', eventData);
 
@@ -997,20 +1011,36 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
       requestBody: eventData
     });
 
-    const eventLink = result.data.htmlLink;
     log('✅', '=== CITA AGENDADA EXITOSAMENTE ===');
     log('✅', `Event ID: ${result.data.id}`);
-    log('✅', `Event Link: ${eventLink}`);
+    log('✅', `Event Link: ${result.data.htmlLink}`);
+    log('✅', `Organizador: ${result.data.organizer?.email}`);
+    log('✅', `Creador: ${result.data.creator?.email}`);
+    log('✅', `Status: ${result.data.status}`);
+    
+    // Verificar que el evento se creó listando eventos
+    try {
+      const eventCheck = await calendar.events.get({
+        calendarId,
+        eventId: result.data.id
+      });
+      log('✅', `Evento verificado en calendario: ${eventCheck.data.summary}`);
+    } catch (verifyError) {
+      log('⚠️', `No se pudo verificar el evento: ${verifyError.message}`);
+    }
     
     return { 
       success: true, 
       mensaje: `Cita agendada exitosamente para el ${inicio.toFormat("d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}`,
-      eventLink: eventLink,
+      eventLink: result.data.htmlLink,
+      eventId: result.data.id,
       instruccion: 'DEBES incluir este link en tu respuesta al cliente para que pueda agregarlo a su calendario'
     };
   } catch (error) {
     log('❌', '=== ERROR EN AGENDAR CITA ===');
     log('❌', `Error: ${error.message}`);
+    log('❌', `Código de error: ${error.code}`);
+    log('❌', `Detalles: ${JSON.stringify(error.errors || {})}`);
     log('❌', `Stack: ${error.stack?.substring(0, 500)}`);
     return { success: false, error: error.message };
   }
