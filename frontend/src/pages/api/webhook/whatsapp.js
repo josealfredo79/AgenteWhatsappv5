@@ -950,8 +950,14 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
     });
 
     // Extraer URLs de imágenes del documento
-    const imagenesExtraidas = extraerImagenesDeTexto(fullText);
-    log('🖼️', `Imágenes encontradas: ${imagenesExtraidas.length}`);
+    let imagenesExtraidas = extraerImagenesDeTexto(fullText);
+    log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
+
+    // Si no hay imágenes en el documento, usar imágenes de prueba
+    if (imagenesExtraidas.length === 0) {
+      log('🖼️', 'Usando imágenes de prueba (demo)');
+      imagenesExtraidas = obtenerImagenesPrueba(tipo);
+    }
 
     return { 
       success: true, 
@@ -962,6 +968,41 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
   } catch (error) {
     log('❌', 'Error en consultar_documentos', { error: error.message });
     return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// IMÁGENES DE PRUEBA (DEMO) - Reemplazar con URLs reales después
+// ============================================================================
+function obtenerImagenesPrueba(tipo) {
+  // Imágenes de casas de Unsplash (dominio público, URLs directas que funcionan con Twilio)
+  const imagenesCasas = [
+    'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80', // Casa moderna
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80', // Casa con jardín
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80', // Casa elegante
+  ];
+  
+  const imagenesTerrenos = [
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80', // Terreno verde
+    'https://images.unsplash.com/photo-1628624747186-a941c476b7ef?w=800&q=80', // Terreno amplio
+    'https://images.unsplash.com/photo-1595880500386-4b33823094d4?w=800&q=80', // Terreno con vista
+  ];
+  
+  const imagenesDepartamentos = [
+    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80', // Depto moderno
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80', // Sala depto
+    'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80', // Depto con vista
+  ];
+  
+  const tipoLower = (tipo || '').toLowerCase();
+  
+  if (tipoLower.includes('terreno') || tipoLower.includes('lote')) {
+    return imagenesTerrenos;
+  } else if (tipoLower.includes('depa') || tipoLower.includes('departamento') || tipoLower.includes('apartamento')) {
+    return imagenesDepartamentos;
+  } else {
+    // Por defecto, casas
+    return imagenesCasas;
   }
 }
 
