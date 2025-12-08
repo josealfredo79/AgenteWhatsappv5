@@ -746,6 +746,7 @@ Muestra máximo 2-3 opciones relevantes. Pregunta cuál le interesa.
 <accion_requerida>
 El cliente ya mostró interés en una propiedad específica.
 Si pregunta más detalles → dáselos brevemente.
+Si pide FOTOS → USA "consultar_documentos" con los datos: tipo=${tipo}, zona=${zona}, presupuesto=${presupuesto}. El sistema enviará las fotos automáticamente.
 Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
 NO vuelvas a listar todas las opciones.
 </accion_requerida>`;
@@ -883,7 +884,15 @@ Hora por defecto si no especifica: 10:00
 - No hagas introducciones largas
 - No repitas lo que el cliente ya sabe
 - Termina con UNA pregunta o acción clara
-</formato_respuesta>`;
+</formato_respuesta>
+
+<fotos_propiedades>
+📸 CUANDO EL CLIENTE PIDA FOTOS:
+- USA la herramienta "consultar_documentos" con los datos que ya tienes
+- El sistema enviará las fotos automáticamente después de tu respuesta
+- En tu mensaje di algo como: "¡Claro! Te comparto unas fotos de la propiedad 📸"
+- NO digas que no puedes enviar fotos - SÍ PUEDES, el sistema lo hace automáticamente
+</fotos_propiedades>`;
 }
 
 // ============================================================================
@@ -892,7 +901,7 @@ Hora por defecto si no especifica: 10:00
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto.',
+    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto. IMPORTANTE: Esta herramienta también devuelve URLs de FOTOS de las propiedades. Cuando el cliente pide fotos, USA ESTA HERRAMIENTA - el sistema enviará las imágenes automáticamente.',
     input_schema: {
       type: 'object',
       properties: {
