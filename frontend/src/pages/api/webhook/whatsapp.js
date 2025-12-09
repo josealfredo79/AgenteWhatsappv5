@@ -1384,18 +1384,26 @@ export default async function handler(req, res) {
     if (pideFotos && !claudeLlamoHerramienta) {
       log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
       
-      // Forzar la consulta de documentos para obtener fotos
-      const toolResultForzado = await consultarDocumentos({
-        tipo: estadoActualizado.tipo_propiedad || 'casa',
-        zona: estadoActualizado.zona || 'general',
-        presupuesto: estadoActualizado.presupuesto || 'cualquiera'
-      });
-      
-      if (toolResultForzado.success && toolResultForzado.imagenes && toolResultForzado.imagenes.length > 0) {
-        imagenesParaEnviar = toolResultForzado.imagenes.slice(0, 3);
-        log('🖼️', `✅ Fotos forzadas obtenidas: ${imagenesParaEnviar.length}`, imagenesParaEnviar);
-      } else {
-        log('🖼️', '❌ No se obtuvieron fotos del toolResultForzado', toolResultForzado);
+      try {
+        // Forzar la consulta de documentos para obtener fotos
+        const toolResultForzado = await consultarDocumentos({
+          tipo: estadoActualizado.tipo_propiedad || 'casa',
+          zona: estadoActualizado.zona || 'general',
+          presupuesto: estadoActualizado.presupuesto || 'cualquiera'
+        });
+        
+        if (toolResultForzado.success && toolResultForzado.imagenes && toolResultForzado.imagenes.length > 0) {
+          imagenesParaEnviar = toolResultForzado.imagenes.slice(0, 3);
+          log('🖼️', `✅ Fotos forzadas obtenidas: ${imagenesParaEnviar.length}`, imagenesParaEnviar);
+        } else {
+          log('🖼️', '⚠️ consultarDocumentos no retornó fotos, usando fallback directo');
+          imagenesParaEnviar = obtenerImagenesPrueba(estadoActualizado.tipo_propiedad || 'casa');
+          log('🖼️', `✅ Fotos de fallback: ${imagenesParaEnviar.length}`);
+        }
+      } catch (errorFotos) {
+        log('🖼️', '❌ Error en consultarDocumentos, usando fallback:', errorFotos.message);
+        imagenesParaEnviar = obtenerImagenesPrueba(estadoActualizado.tipo_propiedad || 'casa');
+        log('🖼️', `✅ Fotos de fallback (después de error): ${imagenesParaEnviar.length}`);
       }
     }
     
@@ -1514,34 +1522,45 @@ export default async function handler(req, res) {
     });
 
     // 12.5 Enviar imágenes si hay
+    log('🖼️', `=== VERIFICANDO IMÁGENES A ENVIAR ===`);
+    log('🖼️', `imagenesParaEnviar existe: ${!!imagenesParaEnviar}`);
+    log('🖼️', `imagenesParaEnviar.length: ${imagenesParaEnviar ? imagenesParaEnviar.length : 0}`);
+    log('🖼️', `imagenesParaEnviar contenido:`, imagenesParaEnviar);
+    
     if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
-      log('🖼️', `Enviando ${imagenesParaEnviar.length} imágenes...`);
+      log('🖼️', `✅ Enviando ${imagenesParaEnviar.length} imágenes...`);
       
       for (let i = 0; i < imagenesParaEnviar.length; i++) {
         const imgUrl = imagenesParaEnviar[i];
+        log('🖼️', `Procesando imagen ${i + 1}/${imagenesParaEnviar.length}: ${imgUrl}`);
         try {
           // Pequeña pausa entre mensajes para evitar rate limiting
-          if (i > 0) await new Promise(resolve => setTimeout(resolve, 500));
+          if (i > 0) await new Promise(resolve => setTimeout(resolve, 1000));
           
-          await enviarMensajeConImagen(
+          const resultadoImg = await enviarMensajeConImagen(
             client,
             'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
             From,
-            '', // Sin texto adicional
+            i === 0 ? '📸 Foto de la propiedad:' : '', // Texto solo en la primera
             imgUrl
           );
+          
+          log('🖼️', `Resultado envío imagen ${i + 1}:`, resultadoImg);
           
           // Guardar en historial
           await guardarMensajeEnSheet({ 
             telefono, 
             direccion: 'outbound', 
             mensaje: `[IMAGEN: ${imgUrl}]`, 
-            messageId: '' 
+            messageId: resultadoImg.sid || '' 
           });
         } catch (imgError) {
-          log('⚠️', `Error enviando imagen ${i + 1}: ${imgError.message}`);
+          log('❌', `Error enviando imagen ${i + 1}: ${imgError.message}`, imgError);
         }
       }
+      log('🖼️', `=== FIN ENVÍO DE IMÁGENES ===`);
+    } else {
+      log('🖼️', `⚠️ No hay imágenes para enviar`);
     }
 
     // 13. Guardar respuesta en historial
