@@ -739,7 +739,12 @@ NO repitas datos que ya tienes. NO des información de propiedades aún.
 <accion_requerida>
 Ya tienes TODOS los datos (tipo: ${tipo}, zona: ${zona}, presupuesto: ${presupuesto}).
 USA la herramienta "consultar_documentos" AHORA para buscar opciones.
-Muestra máximo 2-3 opciones relevantes. Pregunta cuál le interesa.
+Muestra máximo 2-3 opciones relevantes.
+
+📸 IMPORTANTE: Al final de cada propiedad, agrega:
+"📸 Escribe 'ver fotos' para ver imágenes de esta propiedad"
+
+Pregunta cuál le interesa.
 </accion_requerida>`;
   } else if (etapa === 'interesado') {
     instruccionEspecifica = `
@@ -889,6 +894,7 @@ Hora por defecto si no especifica: 10:00
 - No hagas introducciones largas
 - No repitas lo que el cliente ya sabe
 - Termina con UNA pregunta o acción clara
+- Cuando muestres propiedades, SIEMPRE incluye al final: "📸 Escribe 'ver fotos' para ver imágenes"
 </formato_respuesta>
 
 <REGLA_CRITICA_FOTOS>
