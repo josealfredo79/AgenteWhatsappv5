@@ -1,0 +1,220 @@
+BASE DE CONOCIMIENTO - AGENTE INMOBILIARIO IA
+=============================================
+
+🏢 INFORMACIÓN DE LA EMPRESA
+============================
+Nombre de la Empresa: [Tu Empresa Inmobiliaria]
+Ubicación Principal: [Tu Ciudad, Estado]
+Teléfono de Oficina: [Tu teléfono]
+Horario de Atención: Lunes a Viernes 9:00 - 18:00, Sábados 9:00 - 14:00
+Sitio Web: [www.tuempresa.com]
+
+
+🏠 CATÁLOGO DE PROPIEDADES
+==========================
+
+--- PROPIEDAD 1: Casa Residencial Premium ---
+Tipo: Casa
+Ubicación: [Colonia/Fraccionamiento, Ciudad]
+Precio: $3,500,000 MXN
+Características:
+- 3 recámaras
+- 2.5 baños
+- Estacionamiento para 2 autos
+- Cocina integral
+- Sala y comedor amplios
+- Jardín trasero
+- Cuarto de servicio
+Metros de Terreno: 200 m²
+Metros de Construcción: 180 m²
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80
+
+------------------------------------------------------------
+
+--- PROPIEDAD 2: Casa Familiar Económica ---
+Tipo: Casa
+Ubicación: [Colonia/Fraccionamiento, Ciudad]
+Precio: $1,800,000 MXN
+Características:
+- 2 recámaras
+- 1 baño completo
+- Estacionamiento para 1 auto
+- Cocina equipada
+- Patio de servicio
+Metros de Terreno: 120 m²
+Metros de Construcción: 90 m²
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1599427303058-f04cbcf4756f?w=800&q=80
+
+------------------------------------------------------------
+
+--- PROPIEDAD 3: Terreno Residencial ---
+Tipo: Terreno
+Ubicación: [Fraccionamiento, Ciudad]
+Precio: $880,000 MXN
+Características:
+- Uso de suelo residencial
+- Servicios completos (agua, luz, drenaje)
+- Calles pavimentadas
+- Acceso controlado
+- Escrituras inmediatas
+Metros: 160 m² (8x20)
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1628624747186-a941c476b7ef?w=800&q=80
+
+------------------------------------------------------------
+
+--- PROPIEDAD 4: Terreno Premium Esquina ---
+Tipo: Terreno
+Ubicación: [Fraccionamiento, Ciudad]
+Precio: $1,100,000 MXN
+Características:
+- Lote en esquina
+- Mayor plusvalía
+- Servicios completos
+- Ideal para casa grande
+- Escrituras listas
+Metros: 200 m² (10x20)
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1595880500386-4b33823094d4?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&q=80
+
+------------------------------------------------------------
+
+--- PROPIEDAD 5: Departamento Moderno ---
+Tipo: Departamento
+Ubicación: [Zona/Ciudad]
+Precio: $2,200,000 MXN
+Características:
+- 2 recámaras
+- 2 baños
+- Balcón con vista
+- Cocina integral
+- Área de lavado
+- Gimnasio y alberca (amenidades)
+- Estacionamiento techado
+Metros: 95 m²
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80
+
+------------------------------------------------------------
+
+--- PROPIEDAD 6: Casa de Lujo ---
+Tipo: Casa
+Ubicación: [Zona Residencial Premium, Ciudad]
+Precio: $6,500,000 MXN
+Características:
+- 4 recámaras con baño
+- Recámara principal con vestidor
+- Estacionamiento para 3 autos
+- Cocina gourmet
+- Sala de TV
+- Terraza con asador
+- Alberca privada
+- Cuarto de servicio con baño
+Metros de Terreno: 400 m²
+Metros de Construcción: 320 m²
+Estatus: Disponible
+
+FOTO: https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=800&q=80
+FOTO: https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=800&q=80
+
+
+💰 PLANES DE FINANCIAMIENTO
+===========================
+
+Plan Contado:
+- Descuento: 15% sobre precio de lista
+- Escrituración inmediata
+
+Plan 12 Meses:
+- Enganche: 30%
+- 12 mensualidades sin intereses
+- Escrituración al liquidar
+
+Plan 24 Meses:
+- Enganche: 20%
+- 24 mensualidades con tasa fija del 8% anual
+- Escrituración al liquidar
+
+Plan 36 Meses:
+- Enganche: 10%
+- 36 mensualidades con tasa fija del 10% anual
+- Requiere aprobación crediticia
+
+
+❓ PREGUNTAS FRECUENTES
+======================
+
+Pregunta: ¿Las propiedades tienen escrituras?
+Respuesta: Sí, todas nuestras propiedades cuentan con escrituras públicas y están libres de gravamen.
+
+Pregunta: ¿Cuánto tiempo tarda el proceso de compra?
+Respuesta: El proceso completo tarda aproximadamente 30 días hábiles desde la firma del contrato.
+
+Pregunta: ¿Qué documentos necesito para comprar?
+Respuesta: Identificación oficial (INE), comprobante de domicilio, CURP, y constancia de situación fiscal (si aplica financiamiento).
+
+Pregunta: ¿Puedo visitar las propiedades?
+Respuesta: ¡Por supuesto! Agenda una cita y con gusto te mostramos las propiedades disponibles.
+
+Pregunta: ¿Aceptan créditos bancarios?
+Respuesta: Sí, trabajamos con todos los bancos y aceptamos créditos Infonavit, Fovissste y bancarios.
+
+Pregunta: ¿Cuándo puedo construir en los terrenos?
+Respuesta: ¡Inmediatamente! La urbanización está terminada al 100%. Tras la firma de escrituras puede iniciar su proyecto.
+
+Pregunta: ¿Qué necesito para apartar?
+Respuesta: Necesitamos su identificación oficial, comprobante de domicilio y un depósito de apartado que es 100% abonable al enganche.
+
+
+📞 CONTACTO Y CITAS
+===================
+Dirección de oficina: [Tu dirección completa]
+Punto de referencia: [Referencia para llegar fácilmente]
+
+Para agendar una visita el cliente debe proporcionar:
+- Nombre completo
+- Teléfono de contacto
+- Fecha y hora preferida
+- Propiedad de interés
+
+
+============================================================
+INSTRUCCIONES PARA EL ADMINISTRADOR
+============================================================
+
+1. Copia todo este contenido a tu Google Docs
+2. Reemplaza los textos entre [corchetes] con tu información real
+3. Agrega más propiedades copiando el formato existente
+4. Cambia las URLs de FOTO: por las URLs reales de tus propiedades
+
+FORMATO PARA AGREGAR FOTOS:
+Las fotos deben estar en líneas que empiecen con "FOTO:"
+Ejemplo:
+FOTO: https://tu-servidor.com/imagen-casa.jpg
+FOTO: https://drive.google.com/file/d/ABC123/view
+
+El agente detectará automáticamente estas líneas y enviará 
+las imágenes cuando el cliente las solicite.
+
+PARA SUBIR TUS PROPIAS FOTOS:
+1. Sube las fotos a Google Drive
+2. Haz clic derecho > "Obtener enlace"
+3. Cambia el permiso a "Cualquier persona con el enlace"
+4. Copia el enlace y pégalo después de "FOTO:"
+
+Última actualización: [Fecha]

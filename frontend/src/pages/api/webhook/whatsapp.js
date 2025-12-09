@@ -369,23 +369,18 @@ function detectarDatosEnMensaje(mensaje) {
     datos.tipo_propiedad = 'Bodega';
   }
 
-  // ZONA
-  if (/\bzapopan\b/.test(mensajeLower)) {
-    datos.zona = 'Zapopan, Jalisco';
-  } else if (/\bguadalajara\b/.test(mensajeLower)) {
-    datos.zona = 'Guadalajara, Jalisco';
-  } else if (/\btlajomulco\b/.test(mensajeLower)) {
-    datos.zona = 'Tlajomulco, Jalisco';
-  } else if (/\btonala\b/.test(mensajeLower)) {
-    datos.zona = 'Tonalá, Jalisco';
-  } else if (/\btlaquepaque\b/.test(mensajeLower)) {
-    datos.zona = 'Tlaquepaque, Jalisco';
-  } else if (/\bchapala\b/.test(mensajeLower)) {
-    datos.zona = 'Chapala, Jalisco';
-  } else if (/\bajijic\b/.test(mensajeLower)) {
-    datos.zona = 'Ajijic, Jalisco';
-  } else if (/\bvallarta\b/.test(mensajeLower)) {
-    datos.zona = 'Puerto Vallarta, Jalisco';
+  // ZONA - Detectar cualquier ubicación mencionada
+  // Buscar patrones como "en [lugar]" o "zona [lugar]" o "colonia [lugar]"
+  const patronZona = /(?:en|zona|colonia|fraccionamiento|ciudad|municipio)\s+([a-záéíóúñ\s]{3,30})/i;
+  const matchZona = mensaje.match(patronZona);
+  if (matchZona) {
+    // Capitalizar la primera letra de cada palabra
+    const zonaDetectada = matchZona[1].trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    datos.zona = zonaDetectada;
+    log('📍', `Zona detectada del mensaje: ${zonaDetectada}`);
   }
 
   // PRESUPUESTO
@@ -830,6 +825,14 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 - Objetivo: Ayudar al cliente a encontrar su propiedad ideal y agendar visitas
 </perfil>
 
+<REGLA_INFORMACION>
+⚠️ IMPORTANTE: SOLO usa información que obtengas del documento (herramienta consultar_documentos).
+- NO inventes ubicaciones, precios, ni características de propiedades
+- NO menciones ciudades o zonas específicas a menos que el CLIENTE las mencione primero
+- Si no tienes información de una zona, di: "Déjame consultar nuestro catálogo para esa zona"
+- Toda la información de propiedades viene del documento de Google Docs
+</REGLA_INFORMACION>
+
 <datos_del_cliente>
 - Teléfono: ${estado.telefono}
 - Tipo de propiedad: ${tipo || '❌ Pendiente'}
@@ -940,7 +943,7 @@ const tools = [
     input_schema: {
       type: 'object',
       properties: {
-        resumen: { type: 'string', description: 'Título de la cita, ej: Visita a terreno en Zapopan' },
+        resumen: { type: 'string', description: 'Título de la cita, ej: Visita a propiedad' },
         fecha: { type: 'string', description: 'Fecha que el CLIENTE proporcionó. Formato: YYYY-MM-DD. NO inventes fechas.' },
         hora_inicio: { type: 'string', description: 'Hora que el CLIENTE proporcionó. Formato: HH:MM (24hrs)' },
         duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' }
