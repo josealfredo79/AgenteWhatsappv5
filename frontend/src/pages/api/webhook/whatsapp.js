@@ -1376,10 +1376,12 @@ export default async function handler(req, res) {
     let imagenesParaEnviar = [];  // Para guardar imágenes encontradas
     
     // 10.1 DETECCIÓN FORZADA DE FOTOS: Si el usuario pide fotos y Claude no llamó a la herramienta
-    const pideFotos = /foto|fotos|imagen|imagenes|imágenes|ver casa|ver depa|ver terreno|muéstrame|enseñame|dame foto/i.test(Body);
+    const pideFotos = /fotos?|imagen(es)?|imágenes|ver\s*(casa|depa|terreno|propiedad|lote)|mué?strame|ense[ñn]ame|dame\s*fotos?|quiero\s*ver|tienes?\s*fotos?/i.test(Body);
     const claudeLlamoHerramienta = response.stop_reason === 'tool_use';
     
-    if (pideFotos && !claudeLlamoHerramienta && estadoActualizado.tipo_propiedad) {
+    log('🖼️', `Detección de fotos - pideFotos: ${pideFotos}, claudeLlamoHerramienta: ${claudeLlamoHerramienta}, tipo_propiedad: ${estadoActualizado.tipo_propiedad}`);
+    
+    if (pideFotos && !claudeLlamoHerramienta) {
       log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
       
       // Forzar la consulta de documentos para obtener fotos
@@ -1391,7 +1393,9 @@ export default async function handler(req, res) {
       
       if (toolResultForzado.success && toolResultForzado.imagenes && toolResultForzado.imagenes.length > 0) {
         imagenesParaEnviar = toolResultForzado.imagenes.slice(0, 3);
-        log('🖼️', `✅ Fotos forzadas obtenidas: ${imagenesParaEnviar.length}`);
+        log('🖼️', `✅ Fotos forzadas obtenidas: ${imagenesParaEnviar.length}`, imagenesParaEnviar);
+      } else {
+        log('🖼️', '❌ No se obtuvieron fotos del toolResultForzado', toolResultForzado);
       }
     }
     
@@ -1453,7 +1457,31 @@ export default async function handler(req, res) {
 
     log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
-    // 10. Detectar si hubo cita agendada y actualizar estado con TODOS los datos
+    // 10.2 Si vamos a enviar fotos, limpiar la respuesta de Claude si dice que no puede
+    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
+      // Remover frases donde dice que no puede mostrar fotos
+      respuestaTexto = respuestaTexto
+        .replace(/como no puedo mostrar fotos[^.]*\./gi, '')
+        .replace(/no puedo mostrar fotos[^.]*\./gi, '')
+        .replace(/no puedo enviar fotos[^.]*\./gi, '')
+        .replace(/no puedo compartir fotos[^.]*\./gi, '')
+        .replace(/lo siento,?\s*no puedo[^.]*foto[^.]*\./gi, '')
+        .replace(/solicitar? el catálogo[^.]*\./gi, '')
+        .replace(/revisar? el listado en nuestra página[^.]*\./gi, '')
+        .trim();
+      
+      // Si la respuesta quedó muy corta o vacía, dar una respuesta estándar
+      if (respuestaTexto.length < 20) {
+        respuestaTexto = '¡Aquí te envío las fotos de la propiedad! 📸';
+      } else {
+        // Agregar mensaje de que vienen las fotos
+        respuestaTexto += '\n\n📸 Te envío unas fotos a continuación:';
+      }
+      
+      log('🖼️', 'Respuesta modificada para incluir fotos');
+    }
+
+    // 10.3 Detectar si hubo cita agendada y actualizar estado con TODOS los datos
     if (citaAgendadaInfo) {
       estadoActualizado.etapa = 'cita_agendada';
       estadoActualizado.fecha_cita = `${citaAgendadaInfo.fecha} ${citaAgendadaInfo.hora}`;
