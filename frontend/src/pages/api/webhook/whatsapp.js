@@ -745,8 +745,13 @@ Muestra máximo 2-3 opciones relevantes. Pregunta cuál le interesa.
     instruccionEspecifica = `
 <accion_requerida>
 El cliente ya mostró interés en una propiedad específica.
+
+📸 SI PIDE FOTOS/IMÁGENES:
+→ USA "consultar_documentos" OBLIGATORIAMENTE con tipo="${tipo}", zona="${zona}", presupuesto="${presupuesto}"
+→ Di: "¡Claro! Te envío fotos 📸"
+→ Las fotos se envían AUTOMÁTICAMENTE
+
 Si pregunta más detalles → dáselos brevemente.
-Si pide FOTOS → USA "consultar_documentos" con los datos: tipo=${tipo}, zona=${zona}, presupuesto=${presupuesto}. El sistema enviará las fotos automáticamente.
 Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
 NO vuelvas a listar todas las opciones.
 </accion_requerida>`;
@@ -886,13 +891,24 @@ Hora por defecto si no especifica: 10:00
 - Termina con UNA pregunta o acción clara
 </formato_respuesta>
 
-<fotos_propiedades>
-📸 CUANDO EL CLIENTE PIDA FOTOS:
-- USA la herramienta "consultar_documentos" con los datos que ya tienes
-- El sistema enviará las fotos automáticamente después de tu respuesta
-- En tu mensaje di algo como: "¡Claro! Te comparto unas fotos de la propiedad 📸"
-- NO digas que no puedes enviar fotos - SÍ PUEDES, el sistema lo hace automáticamente
-</fotos_propiedades>`;
+<REGLA_CRITICA_FOTOS>
+⚠️ REGLA OBLIGATORIA - CUANDO EL CLIENTE PIDA FOTOS/IMAGENES:
+
+Si el mensaje contiene: "foto", "fotos", "imagen", "imagenes", "ver", "muestra", "enseña", "dame fotos"
+
+DEBES HACER ESTO:
+1. USA la herramienta "consultar_documentos" con tipo="${tipo || 'casa'}", zona="${zona || 'general'}", presupuesto="${presupuesto || 'cualquiera'}"
+2. Responde: "¡Claro! Te envío unas fotos de la propiedad 📸" (o similar)
+3. El sistema enviará las imágenes AUTOMÁTICAMENTE
+
+❌ NUNCA digas:
+- "No puedo mostrar fotos"
+- "No puedo enviar imágenes"
+- "Visita la propiedad para ver"
+- "Solicita el catálogo por correo"
+
+✅ SÍ PUEDES enviar fotos - USA LA HERRAMIENTA consultar_documentos
+</REGLA_CRITICA_FOTOS>`;
 }
 
 // ============================================================================
@@ -1352,6 +1368,26 @@ export default async function handler(req, res) {
     const MAX_ITERACIONES = 3;
     let citaAgendadaInfo = null;  // Para guardar info de la cita
     let imagenesParaEnviar = [];  // Para guardar imágenes encontradas
+    
+    // 10.1 DETECCIÓN FORZADA DE FOTOS: Si el usuario pide fotos y Claude no llamó a la herramienta
+    const pideFotos = /foto|fotos|imagen|imagenes|imágenes|ver casa|ver depa|ver terreno|muéstrame|enseñame|dame foto/i.test(Body);
+    const claudeLlamoHerramienta = response.stop_reason === 'tool_use';
+    
+    if (pideFotos && !claudeLlamoHerramienta && estadoActualizado.tipo_propiedad) {
+      log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
+      
+      // Forzar la consulta de documentos para obtener fotos
+      const toolResultForzado = await consultarDocumentos({
+        tipo: estadoActualizado.tipo_propiedad || 'casa',
+        zona: estadoActualizado.zona || 'general',
+        presupuesto: estadoActualizado.presupuesto || 'cualquiera'
+      });
+      
+      if (toolResultForzado.success && toolResultForzado.imagenes && toolResultForzado.imagenes.length > 0) {
+        imagenesParaEnviar = toolResultForzado.imagenes.slice(0, 3);
+        log('🖼️', `✅ Fotos forzadas obtenidas: ${imagenesParaEnviar.length}`);
+      }
+    }
     
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
