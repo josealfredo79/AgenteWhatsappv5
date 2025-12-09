@@ -736,8 +736,7 @@ Ya tienes TODOS los datos (tipo: ${tipo}, zona: ${zona}, presupuesto: ${presupue
 USA la herramienta "consultar_documentos" AHORA para buscar opciones.
 Muestra máximo 2-3 opciones relevantes.
 
-📸 IMPORTANTE: Al final de cada propiedad, agrega:
-"📸 Escribe 'ver fotos' para ver imágenes de esta propiedad"
+NOTA: Si el cliente pide fotos, proporciona los links de las imágenes en texto.
 
 Pregunta cuál le interesa.
 </accion_requerida>`;
@@ -903,7 +902,7 @@ Hora por defecto si no especifica: 10:00
 - No hagas introducciones largas
 - No repitas lo que el cliente ya sabe
 - Termina con UNA pregunta o acción clara
-- Cuando muestres propiedades, SIEMPRE incluye al final: "📸 Escribe 'ver fotos' para ver imágenes"
+- Si el cliente pide fotos, proporciona los links de las imágenes en texto (NO se envían como imagen)
 </formato_respuesta>
 
 <REGLA_CRITICA_FOTOS>
@@ -1382,14 +1381,16 @@ export default async function handler(req, res) {
     let iteraciones = 0;
     const MAX_ITERACIONES = 3;
     let citaAgendadaInfo = null;  // Para guardar info de la cita
-    let imagenesParaEnviar = [];  // Para guardar imágenes encontradas
+    let imagenesParaEnviar = [];  // DESHABILITADO: Ya no enviamos fotos automáticamente
     
-    // 10.1 DETECCIÓN FORZADA DE FOTOS: Si el usuario pide fotos y Claude no llamó a la herramienta
-    const pideFotos = /fotos?|imagen(es)?|imágenes|ver\s*(casa|depa|terreno|propiedad|lote)|mué?strame|ense[ñn]ame|dame\s*fotos?|quiero\s*ver|tienes?\s*fotos?/i.test(Body);
+    // 10.1 DESHABILITADO: Ya no forzamos envío de fotos
+    // El agente solo proporcionará los links en texto si el cliente los pide
+    const pideFotos = false; // Deshabilitado
     const claudeLlamoHerramienta = response.stop_reason === 'tool_use';
     
-    log('🖼️', `Detección de fotos - pideFotos: ${pideFotos}, claudeLlamoHerramienta: ${claudeLlamoHerramienta}, tipo_propiedad: ${estadoActualizado.tipo_propiedad}`);
+    log('🖼️', `Envío de fotos DESHABILITADO - solo se muestran links en texto`);
     
+    /* DESHABILITADO - Ya no enviamos imágenes automáticamente
     if (pideFotos && !claudeLlamoHerramienta) {
       log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
       
@@ -1415,6 +1416,7 @@ export default async function handler(req, res) {
         log('🖼️', `✅ Fotos de fallback (después de error): ${imagenesParaEnviar.length}`);
       }
     }
+    */
     
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
@@ -1427,11 +1429,14 @@ export default async function handler(req, res) {
       let toolResult;
       if (toolUse.name === 'consultar_documentos') {
         toolResult = await consultarDocumentos(toolUse.input);
-        // Guardar imágenes para enviar después
+        // DESHABILITADO: Ya no enviamos imágenes automáticamente
+        // Solo se muestran los links en texto si el agente los incluye en la respuesta
+        /*
         if (toolResult.success && toolResult.imagenes && toolResult.imagenes.length > 0) {
           imagenesParaEnviar = toolResult.imagenes.slice(0, 3); // Máximo 3 imágenes
           log('🖼️', `Imágenes a enviar: ${imagenesParaEnviar.length}`);
         }
+        */
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
         // Guardar info de la cita para actualizar estado después
