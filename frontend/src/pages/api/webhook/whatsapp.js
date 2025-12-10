@@ -1089,8 +1089,8 @@ function extraerImagenesDeTexto(texto) {
   while ((match = patronImagen.exec(texto)) !== null) {
     const url = match[1].trim();
     if (!imagenes.includes(url)) {
-      imagenes.push(url);
-      log('🖼️', `Imagen encontrada (etiqueta): ${url.substring(0, 50)}...`);
+      imagenes.push(`[${url}]`);
+      log('🖼️', `Imagen encontrada (etiqueta, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
   
@@ -1098,8 +1098,8 @@ function extraerImagenesDeTexto(texto) {
   while ((match = patronUrlDirecta.exec(texto)) !== null) {
     const url = match[1].trim();
     if (!imagenes.includes(url)) {
-      imagenes.push(url);
-      log('🖼️', `Imagen encontrada (URL directa): ${url.substring(0, 50)}...`);
+      imagenes.push(`[${url}]`);
+      log('🖼️', `Imagen encontrada (URL directa, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
   
