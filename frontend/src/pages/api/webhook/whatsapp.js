@@ -917,33 +917,45 @@ Hora por defecto si no especifica: 10:00
 - No hagas introducciones largas
 - No repitas lo que el cliente ya sabe
 - Termina con UNA pregunta o acción clara
-- Si el cliente pide fotos, proporciona los links de las imágenes en texto (NO se envían como imagen)
 </formato_respuesta>
 
+<REGLA_CRITICA_SIN_FOTOS_AUTOMATICAS>
+🚨 REGLA ABSOLUTAMENTE CRÍTICA - NO INCLUIR FOTOS AUTOMÁTICAMENTE:
+
+Cuando muestres propiedades al cliente (casas, terrenos, departamentos):
+❌ NUNCA incluyas links de fotos automáticamente
+❌ NUNCA incluyas URLs de imágenes en la descripción de la propiedad
+❌ NUNCA menciones "aquí están las fotos" si el cliente NO las pidió
+
+✅ SOLO muestra:
+- Tipo de propiedad
+- Ubicación
+- Precio
+- Características principales
+- Pregunta si le interesa o quiere más detalles
+
+El cliente debe PEDIR EXPLÍCITAMENTE las fotos para recibirlas.
+</REGLA_CRITICA_SIN_FOTOS_AUTOMATICAS>
+
 <REGLA_CRITICA_FOTOS>
-⚠️ REGLA OBLIGATORIA - CUANDO EL CLIENTE PIDA FOTOS/IMAGENES:
+⚠️ REGLA OBLIGATORIA - SOLO CUANDO EL CLIENTE PIDA FOTOS/IMAGENES:
 
-Si el mensaje contiene: "foto", "fotos", "imagen", "imagenes", "ver", "muestra", "enseña", "dame fotos"
+El cliente DEBE decir explícitamente: "fotos", "foto", "imágenes", "imagen", "ver fotos", "muestra fotos", "manda fotos", "envía fotos"
 
-DEBES HACER ESTO:
-1. USA la herramienta "consultar_documentos" para obtener los links de las fotos
-2. Cuando la herramienta te devuelva los links, INCLUYE LOS LINKS en tu respuesta de texto
-3. Formatea los links para que sean clickeables, por ejemplo:
-   - "Aquí están las fotos de la propiedad: 📸\n\n🔗 Foto 1: [link]\n🔗 Foto 2: [link]"
-   - O: "Puedes ver las fotos aquí: [link1] [link2]"
+SOLO SI EL CLIENTE PIDE FOTOS, entonces:
+1. USA la herramienta "consultar_documentos" para obtener los links
+2. INCLUYE LOS LINKS en tu respuesta de texto como links clickeables
+3. Formato: "Aquí están las fotos: 📸\n🔗 [link1]\n🔗 [link2]"
 
 ❌ NUNCA digas:
 - "Te envío las fotos" (porque NO se envían como imágenes)
 - "Recibirás las fotos por separado"
-- "El sistema enviará las imágenes"
-- "No puedo mostrar fotos"
 
-✅ SÍ DEBES decir:
+✅ SÍ di:
 - "Aquí están los links de las fotos: [links]"
-- "Puedes ver las fotos en estos links: [links]"
-- "Da click en estos enlaces para ver las fotos: [links]"
+- "Da click en estos enlaces para verlas: [links]"
 
-🎯 IMPORTANTE: Solo proporciona los LINKS en texto, el cliente dará click para verlas.
+🎯 IMPORTANTE: Los links solo se comparten cuando el cliente los PIDA EXPLÍCITAMENTE.
 </REGLA_CRITICA_FOTOS>`;
 }
 
@@ -1024,14 +1036,34 @@ NO INVENTES propiedades. Solo menciona las que aparecen en el documento.`,
       };
     }
 
-    // Extraer URLs de imágenes del documento
+    // Extraer URLs de imágenes del documento ANTES de limpiar el texto
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
 
+    // LIMPIAR las líneas con URLs de fotos del contenido
+    // Esto evita que Claude incluya automáticamente las fotos al mostrar propiedades
+    // Las URLs quedan disponibles en el campo 'imagenes' para cuando el cliente las pida
+    let contenidoSinFotos = fullText
+      .split('\n')
+      .filter(line => {
+        // Eliminar líneas que empiezan con FOTO:, IMAGEN:, IMG:, IMAGE:
+        if (/^\s*(FOTO|IMAGEN|IMG|IMAGE):/i.test(line)) {
+          return false;
+        }
+        // Eliminar líneas que son solo URLs de imágenes
+        if (/^\s*https?:\/\/.*\.(jpg|jpeg|png|webp|gif)/i.test(line)) {
+          return false;
+        }
+        return true;
+      })
+      .join('\n');
+
+    log('📝', `Contenido limpiado. Fotos removidas del texto para Claude.`);
+
     return {
       success: true,
-      content: fullText,
-      imagenes: imagenesExtraidas,
+      content: contenidoSinFotos,  // Contenido SIN URLs de fotos
+      imagenes: imagenesExtraidas,  // URLs disponibles para cuando el cliente las pida
       busqueda: { tipo, zona, presupuesto }
     };
   } catch (error) {
