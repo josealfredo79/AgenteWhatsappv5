@@ -1523,12 +1523,26 @@ export default async function handler(req, res) {
       }
 
       messages.push({ role: 'assistant', content: response.content });
+
+      // CRÍTICO: Solo enviar el CONTENT a Claude, NO el objeto completo
+      // Si enviamos toolResult completo, Claude ve el array 'imagenes' y puede incluir las URLs
+      // Solo enviamos el texto limpio sin las URLs de fotos
+      let contentParaClaude;
+      if (toolUse.name === 'consultar_documentos' \u0026\u0026 toolResult.success) {
+        // Para consultar_documentos: SOLO enviar el content (sin imagenes)
+        contentParaClaude = toolResult.content || 'No se encontró información';
+        log('📝', 'Enviando a Claude SOLO el content (sin array imagenes)');
+      } else {
+        // Para otras herramientas (agendar_cita): enviar el resultado completo
+        contentParaClaude = JSON.stringify(toolResult);
+      }
+
       messages.push({
         role: 'user',
         content: [{
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: JSON.stringify(toolResult)
+          content: contentParaClaude
         }]
       });
 
