@@ -814,7 +814,29 @@ Tu objetivo:
 </accion_requerida>`;
   }
 
-  return `Eres Ana, asesora inmobiliaria profesional.
+  return `
+###############################################################
+# RESTRICCIÓN CRÍTICA - LEER ANTES DE CUALQUIER RESPUESTA #
+###############################################################
+
+⛔ PROHIBIDO INVENTAR INFORMACIÓN:
+- NO menciones "Zapopan", "Guadalajara", "CDMX" ni NINGUNA ciudad real de México
+- Las ÚNICAS ubicaciones válidas son las que aparecen en el documento de Google Docs
+- Si el cliente pregunta por una zona que NO está en el documento, responde:
+  "Por el momento no tenemos propiedades en esa zona. Nuestras opciones están en [zonas del documento]. ¿Te gustaría conocerlas?"
+
+⛔ ZONAS DEL DOCUMENTO (las únicas que puedes mencionar):
+- San Marcos del Valle
+- Puerto Sereno  
+- Riveras Claras
+- Valle Nuevo
+- Lagos Dorados
+
+Si el cliente menciona CUALQUIER otra ciudad → "No tenemos disponibilidad en esa zona"
+
+###############################################################
+
+Eres Ana, asesora inmobiliaria profesional.
 Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 
 <perfil>
@@ -979,15 +1001,38 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
       }
     });
 
+    // Verificar si la zona solicitada existe en el documento
+    const zonaLower = (zona || '').toLowerCase();
+    const zonasReales = ['zapopan', 'guadalajara', 'cdmx', 'monterrey', 'tijuana', 'cancun', 'puebla', 'leon', 'merida', 'queretaro'];
+    const esZonaRealMexico = zonasReales.some(z => zonaLower.includes(z));
+    const zonaEnDocumento = fullText.toLowerCase().includes(zonaLower);
+    
+    // Si pide una zona real de México que NO está en el documento
+    if (esZonaRealMexico && !zonaEnDocumento) {
+      log('⚠️', `Zona "${zona}" NO encontrada en documento - es ciudad real de México`);
+      return {
+        success: true,
+        content: `⚠️ NO TENEMOS PROPIEDADES EN ${zona.toUpperCase()}. 
+        
+Las zonas donde SÍ tenemos disponibilidad son las que aparecen en nuestro catálogo. 
+Por favor responde al cliente: "Actualmente no tenemos propiedades disponibles en ${zona}. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
+
+NO INVENTES propiedades en ${zona}.`,
+        imagenes: [],
+        zona_no_disponible: true,
+        busqueda: { tipo, zona, presupuesto }
+      };
+    }
+
     // Extraer URLs de imágenes del documento
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
 
-    // Si no hay imágenes en el documento, usar imágenes de prueba
-    if (imagenesExtraidas.length === 0) {
-      log('🖼️', 'Usando imágenes de prueba (demo)');
-      imagenesExtraidas = obtenerImagenesPrueba(tipo);
-    }
+    // DESHABILITADO: Ya no usamos imágenes de prueba
+    // if (imagenesExtraidas.length === 0) {
+    //   log('🖼️', 'Usando imágenes de prueba (demo)');
+    //   imagenesExtraidas = obtenerImagenesPrueba(tipo);
+    // }
 
     return { 
       success: true, 
