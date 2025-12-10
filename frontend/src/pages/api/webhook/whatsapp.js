@@ -747,8 +747,9 @@ El cliente ya mostró interés en una propiedad específica.
 
 📸 SI PIDE FOTOS/IMÁGENES:
 → USA "consultar_documentos" OBLIGATORIAMENTE con tipo="${tipo}", zona="${zona}", presupuesto="${presupuesto}"
-→ Di: "¡Claro! Te envío fotos 📸"
-→ Las fotos se envían AUTOMÁTICAMENTE
+→ Di: "¡Claro! Aquí tienes las fotos:"
+→ INCLUYE LOS LINKS DE LAS FOTOS EN TU RESPUESTA DE TEXTO.
+→ NO digas que las envías por separado.
 
 Si pregunta más detalles → dáselos brevemente.
 Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
@@ -1516,37 +1517,53 @@ export default async function handler(req, res) {
     }
 
     // 9. Extraer respuesta final
-    const respuestaTexto = response.content
+    let respuestaTexto = response.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('')
       .trim();
 
-    log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
+    log('💬', 'Respuesta de Claude (original)', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
-    // 10.2 Si vamos a enviar fotos, limpiar la respuesta de Claude si dice que no puede
-    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
-      // Remover frases donde dice que no puede mostrar fotos
-      respuestaTexto = respuestaTexto
-        .replace(/como no puedo mostrar fotos[^.]*\./gi, '')
-        .replace(/no puedo mostrar fotos[^.]*\./gi, '')
-        .replace(/no puedo enviar fotos[^.]*\./gi, '')
-        .replace(/no puedo compartir fotos[^.]*\./gi, '')
-        .replace(/lo siento,?\s*no puedo[^.]*foto[^.]*\./gi, '')
-        .replace(/solicitar? el catálogo[^.]*\./gi, '')
-        .replace(/revisar? el listado en nuestra página[^.]*\./gi, '')
-        .trim();
-      
-      // Si la respuesta quedó muy corta o vacía, dar una respuesta estándar
-      if (respuestaTexto.length < 20) {
-        respuestaTexto = '¡Aquí te envío las fotos de la propiedad! 📸';
-      } else {
-        // Agregar mensaje de que vienen las fotos
-        respuestaTexto += '\n\n📸 Te envío unas fotos a continuación:';
-      }
-      
-      log('🖼️', 'Respuesta modificada para incluir fotos');
+    // ⛔ FILTRO CRÍTICO: Detectar y bloquear menciones de ciudades reales de México
+    const ciudadesProhibidas = [
+      'zapopan', 'guadalajara', 'cdmx', 'ciudad de méxico', 'monterrey', 
+      'tijuana', 'cancun', 'cancún', 'puebla', 'leon', 'león', 'merida', 
+      'mérida', 'queretaro', 'querétaro', 'toluca', 'aguascalientes',
+      'morelia', 'chihuahua', 'culiacan', 'culiacán', 'hermosillo',
+      'saltillo', 'mexicali', 'veracruz', 'acapulco', 'oaxaca', 'tuxtla',
+      'villahermosa', 'tampico', 'reynosa', 'matamoros', 'nuevo laredo',
+      'juarez', 'juárez', 'ensenada', 'mazatlan', 'mazatlán', 'los cabos',
+      'playa del carmen', 'cuernavaca', 'pachuca', 'zacatecas', 'durango',
+      'colima', 'tepic', 'la paz', 'campeche', 'chetumal', 'jalisco',
+      'nuevo leon', 'nuevo león', 'estado de mexico', 'estado de méxico'
+    ];
+    
+    const respuestaLower = respuestaTexto.toLowerCase();
+    const ciudadMencionada = ciudadesProhibidas.find(ciudad => respuestaLower.includes(ciudad));
+    
+    if (ciudadMencionada) {
+      log('⛔', `BLOQUEADO: Claude mencionó ciudad prohibida "${ciudadMencionada}"`);
+      // Reemplazar la respuesta completa
+      respuestaTexto = `Por el momento no tenemos propiedades disponibles en esa zona. 🏠
+
+Nuestras opciones están en:
+• San Marcos del Valle
+• Puerto Sereno
+• Riveras Claras
+• Valle Nuevo
+• Lagos Dorados
+
+¿Te gustaría conocer las propiedades que tenemos en estas zonas?`;
+      log('✅', 'Respuesta reemplazada por mensaje de no disponibilidad');
     }
+
+    // 10.2 DESHABILITADO: Ya no enviamos fotos automáticamente
+    /*
+    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
+      // Código de fotos deshabilitado
+    }
+    */
 
     // 10.3 Detectar si hubo cita agendada y actualizar estado con TODOS los datos
     if (citaAgendadaInfo) {
@@ -1581,46 +1598,15 @@ export default async function handler(req, res) {
     });
 
     // 12.5 Enviar imágenes si hay
-    log('🖼️', `=== VERIFICANDO IMÁGENES A ENVIAR ===`);
-    log('🖼️', `imagenesParaEnviar existe: ${!!imagenesParaEnviar}`);
-    log('🖼️', `imagenesParaEnviar.length: ${imagenesParaEnviar ? imagenesParaEnviar.length : 0}`);
-    log('🖼️', `imagenesParaEnviar contenido:`, imagenesParaEnviar);
+    // DESHABILITADO: Ya no enviamos imágenes como media messages.
+    // Los links deben ir en el texto si el cliente los pide.
+    log('🖼️', `=== ENVÍO DE IMÁGENES DESHABILITADO ===`);
     
+    /* CÓDIGO DE IMÁGENES COMPLETAMENTE DESHABILITADO
     if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
-      log('🖼️', `✅ Enviando ${imagenesParaEnviar.length} imágenes...`);
-      
-      for (let i = 0; i < imagenesParaEnviar.length; i++) {
-        const imgUrl = imagenesParaEnviar[i];
-        log('🖼️', `Procesando imagen ${i + 1}/${imagenesParaEnviar.length}: ${imgUrl}`);
-        try {
-          // Pequeña pausa entre mensajes para evitar rate limiting
-          if (i > 0) await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const resultadoImg = await enviarMensajeConImagen(
-            client,
-            'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
-            From,
-            i === 0 ? '📸 Foto de la propiedad:' : '', // Texto solo en la primera
-            imgUrl
-          );
-          
-          log('🖼️', `Resultado envío imagen ${i + 1}:`, resultadoImg);
-          
-          // Guardar en historial
-          await guardarMensajeEnSheet({ 
-            telefono, 
-            direccion: 'outbound', 
-            mensaje: `[IMAGEN: ${imgUrl}]`, 
-            messageId: resultadoImg.sid || '' 
-          });
-        } catch (imgError) {
-          log('❌', `Error enviando imagen ${i + 1}: ${imgError.message}`, imgError);
-        }
-      }
-      log('🖼️', `=== FIN ENVÍO DE IMÁGENES ===`);
-    } else {
-      log('🖼️', `⚠️ No hay imágenes para enviar`);
+      // ... código comentado ...
     }
+    */
 
     // 13. Guardar respuesta en historial
     await guardarMensajeEnSheet({ 
