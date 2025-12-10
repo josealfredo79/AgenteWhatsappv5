@@ -46,7 +46,7 @@ function getGoogleAuth(scopes) {
     path.join(process.cwd(), 'google-credentials.json');
 
   log('🔑', `Buscando credenciales en: ${keyFile}`);
-  
+
   if (!fs.existsSync(keyFile)) {
     log('❌', `Archivo de credenciales NO existe: ${keyFile}`);
     throw new Error(`Archivo de credenciales no encontrado: ${keyFile}`);
@@ -54,7 +54,7 @@ function getGoogleAuth(scopes) {
 
   const credentialsRaw = fs.readFileSync(keyFile, 'utf8');
   const credentials = JSON.parse(credentialsRaw);
-  
+
   log('✅', `Credenciales cargadas. Client email: ${credentials.client_email}`);
 
   if (credentials.private_key) {
@@ -78,7 +78,7 @@ function normalizarTelefono(telefono) {
     .replace('whatsapp:', '')
     .replace(/\s/g, '')
     .trim();
-  
+
   // Extraer solo los últimos 10 dígitos para comparación más flexible
   return normalizado;
 }
@@ -97,7 +97,7 @@ function telefonosCoinciden(tel1, tel2) {
 async function obtenerEstadoConversacion(telefono) {
   const telefonoNormalizado = normalizarTelefono(telefono);
   log('📖', `Buscando estado para teléfono: ${telefonoNormalizado}`);
-  
+
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -110,12 +110,12 @@ async function obtenerEstadoConversacion(telefono) {
 
     const rows = response.data.values || [];
     log('📊', `Total filas en Estados: ${rows.length}`);
-    
+
     // DEBUG: Mostrar los últimos 5 teléfonos en la hoja
     const ultimos5 = rows.slice(-5).map(r => r[0]);
     log('🔍', `Últimos 5 teléfonos en hoja: ${JSON.stringify(ultimos5)}`);
     log('🔍', `Buscando exactamente: "${telefonoNormalizado}"`);
-    
+
     // Buscar con teléfono normalizado (comparación flexible por últimos 10 dígitos)
     const estadoRow = rows.find(row => {
       const telEnSheet = row[0] || '';
@@ -186,7 +186,7 @@ async function obtenerEstadoConversacion(telefono) {
 async function guardarEstadoConversacion(estado) {
   const telefonoNormalizado = normalizarTelefono(estado.telefono);
   log('💾', `Guardando estado para: ${telefonoNormalizado}`, estado);
-  
+
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -204,7 +204,7 @@ async function guardarEstadoConversacion(estado) {
     });
 
     const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
-    
+
     // Datos ampliados para seguimiento (12 columnas: A-L)
     const rowData = [
       telefonoNormalizado,                                    // A: Teléfono
@@ -253,7 +253,7 @@ async function guardarEstadoConversacion(estado) {
 async function resetearEstadoCliente(telefono) {
   const telefonoNormalizado = normalizarTelefono(telefono);
   log('🗑️', `Reseteando estado para: ${telefonoNormalizado}`);
-  
+
   const estadoVacio = {
     telefono: telefonoNormalizado,
     tipo_propiedad: '',
@@ -263,7 +263,7 @@ async function resetearEstadoCliente(telefono) {
     resumen: '',
     ultima_actualizacion: ''
   };
-  
+
   await guardarEstadoConversacion(estadoVacio);
   return estadoVacio;
 }
@@ -273,12 +273,12 @@ async function resetearEstadoCliente(telefono) {
 // ============================================================================
 function sesionExpirada(ultimaActualizacion) {
   if (!ultimaActualizacion) return true;
-  
+
   try {
     const ultima = DateTime.fromFormat(ultimaActualizacion, 'yyyy-MM-dd HH:mm:ss', { zone: CONFIG.TIMEZONE });
     const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
     const horasTranscurridas = ahora.diff(ultima, 'hours').hours;
-    
+
     return horasTranscurridas > CONFIG.SESION_TIMEOUT_HORAS;
   } catch {
     return true;
@@ -290,7 +290,7 @@ function sesionExpirada(ultimaActualizacion) {
 // ============================================================================
 async function procesarComandoEspecial(mensaje, telefono, estado) {
   const mensajeLimpio = mensaje.trim();
-  
+
   // Comando: REINICIAR
   if (COMANDOS.REINICIAR.test(mensajeLimpio)) {
     await resetearEstadoCliente(telefono);
@@ -299,7 +299,7 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
       respuesta: `🔄 ¡Listo! He reiniciado tu búsqueda.\n\n¡Hola! 👋 Soy Ana, tu asesora inmobiliaria. ¿Qué tipo de propiedad estás buscando hoy?\n\n• 🏠 Casa\n• 🏢 Departamento\n• 🌳 Terreno\n• 🏪 Local comercial`
     };
   }
-  
+
   // Comando: AYUDA
   if (COMANDOS.AYUDA.test(mensajeLimpio)) {
     return {
@@ -307,19 +307,19 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
       respuesta: `📋 *Comandos disponibles:*\n\n• *reiniciar* - Empezar una nueva búsqueda\n• *estado* - Ver tus datos guardados\n• *ayuda* - Ver este menú\n\n💡 También puedes simplemente decirme qué tipo de propiedad buscas, en qué zona y tu presupuesto.`
     };
   }
-  
+
   // Comando: ESTADO
   if (COMANDOS.ESTADO.test(mensajeLimpio)) {
     const tipo = estado.tipo_propiedad || '❌ No definido';
     const zona = estado.zona || '❌ No definida';
     const presupuesto = estado.presupuesto || '❌ No definido';
-    
+
     return {
       esComando: true,
       respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
     };
   }
-  
+
   return { esComando: false };
 }
 
@@ -329,26 +329,26 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
 function detectarDatosEnMensaje(mensaje) {
   const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let datos = {};
-  
+
   // DETECTAR NOMBRE DEL CLIENTE
   const matchNombre = mensaje.match(/(?:me llamo|soy|mi nombre es)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/i);
   if (matchNombre) {
     datos.nombre_cliente = matchNombre[1].trim();
     log('👤', `Nombre detectado: ${datos.nombre_cliente}`);
   }
-  
+
   // DETECTAR CAMBIO DE OPINIÓN
-  const quiereCambiar = 
+  const quiereCambiar =
     /\b(mejor|cambio|cambie|prefiero|en realidad|ya no|ahora quiero|pensandolo bien|pensándolo bien)\b/i.test(mensajeLower) ||
     /\b(otra|otras|otro|otros|diferentes?)\s*(opciones?|propiedades?|casas?|terrenos?|departamentos?)\b/i.test(mensajeLower) ||
     /\b(no me convence|no me gusta|muy caro|muy lejos|busco otra|vemos otra|muestrame otra|muéstrame otra)\b/i.test(mensajeLower) ||
     /\b(cancelar?|no quiero|dejalo|déjalo|olvidalo|olvídalo)\s*(la cita|agendar|visita)?\b/i.test(mensajeLower);
-  
+
   if (quiereCambiar) {
     datos.cambio_opinion = true;
     log('🔄', 'Detectado: cliente quiere cambiar/ver otras opciones');
   }
-  
+
   // DETECTAR CANCELACIÓN ESPECÍFICA
   const quiereCancelar = /\b(cancelar?|no quiero|ya no|dejalo|déjalo)\s*(la cita|agendar|visita|ir)?\b/i.test(mensajeLower);
   if (quiereCancelar) {
@@ -392,7 +392,7 @@ function detectarDatosEnMensaje(mensaje) {
     if (matchNumero) {
       const numero = parseInt(matchNumero[1].replace(/,/g, ''), 10);
       if (numero >= 100000) {
-        datos.presupuesto = numero >= 1000000 
+        datos.presupuesto = numero >= 1000000
           ? `${(numero / 1000000).toFixed(1)} millones de pesos`
           : `${numero.toLocaleString('es-MX')} pesos`;
       }
@@ -400,30 +400,30 @@ function detectarDatosEnMensaje(mensaje) {
   }
 
   // DETECTAR INTENCIÓN DE AGENDAR
-  const quiereAgendar = 
+  const quiereAgendar =
     /^(si|sí|claro|por favor|ok|va|dale|okay|perfecto|por supuesto|desde luego)[\s.,!?]*$/i.test(mensaje.trim()) ||
     /\b(quiero|quisiera|me gustaria|me gustaría|podemos|podriamos|podríamos)\s+(agendar|visitar|ver|conocer|ir)\b/i.test(mensajeLower) ||
     /\b(si|sí),?\s*(por favor|quiero|me interesa)/i.test(mensajeLower) ||
     /\bagendame\b|\bagenda\b|\bvisita\b/i.test(mensajeLower);
-  
+
   if (quiereAgendar) {
     datos.quiere_agendar = true;
     log('📅', 'Detectado: cliente quiere agendar');
   }
 
   // DETECTAR FECHA/HORA proporcionada
-  const tieneFecha = 
+  const tieneFecha =
     /\b(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/i.test(mensajeLower) ||
     /\b(mañana|pasado\s*mañana|hoy|esta\s*semana|proxima\s*semana|próxima\s*semana)\b/i.test(mensajeLower) ||
     /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower) ||
     /\b\d{1,2}\s*(de|\/|-)\s*\d{1,2}\b/i.test(mensajeLower) ||
     /\b\d{1,2}\s*(de|del)\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower);
-  
-  const tieneHora = 
+
+  const tieneHora =
     /\b\d{1,2}:\d{2}\b/.test(mensajeLower) ||
     /\b\d{1,2}\s*(am|pm|hrs|horas|de la mañana|de la tarde|de la noche)\b/i.test(mensajeLower) ||
     /\b(a las|alas)\s*\d{1,2}\b/i.test(mensajeLower);
-  
+
   if (tieneFecha || tieneHora) {
     datos.tiene_fecha = true;
     log('🗓️', 'Detectado: cliente proporcionó fecha/hora');
@@ -431,8 +431,8 @@ function detectarDatosEnMensaje(mensaje) {
 
   // DETECTAR INTERÉS EN OPCIÓN ESPECÍFICA
   if (/\b(el|la|ese|esa|este|esta)\s*(primero|primer|1|uno|lote|terreno|casa|opcion|opción)\b/i.test(mensajeLower) ||
-      /\b(me interesa|me gusta|quiero)\s*(el|la|ese|esa)?\s*(primero|1|uno|lote|terreno|opcion)\b/i.test(mensajeLower) ||
-      /^(el\s*)?(1|2|3|primero|segundo|tercero|uno|dos|tres)[\s.,]*$/i.test(mensaje.trim())) {
+    /\b(me interesa|me gusta|quiero)\s*(el|la|ese|esa)?\s*(primero|1|uno|lote|terreno|opcion)\b/i.test(mensajeLower) ||
+    /^(el\s*)?(1|2|3|primero|segundo|tercero|uno|dos|tres)[\s.,]*$/i.test(mensaje.trim())) {
     datos.mostro_interes = true;
     log('👆', 'Detectado: cliente mostró interés en opción específica');
   }
@@ -481,12 +481,12 @@ function detectarDatosEnMensaje(mensaje) {
 // ============================================================================
 function actualizarEstadoConDatos(estadoActual, datosNuevos) {
   let nuevaEtapa = estadoActual.etapa;
-  
+
   // Determinar datos finales
   let tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
   let zonaFinal = datosNuevos.zona || estadoActual.zona;
   let presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
-  
+
   // NUEVA BÚSQUEDA COMPLETA - Limpiar todo y empezar de cero
   if (datosNuevos.nueva_busqueda && !datosNuevos.tipo_propiedad && !datosNuevos.zona) {
     log('🆕', 'Nueva búsqueda detectada - limpiando datos anteriores');
@@ -500,14 +500,14 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       fecha_cita: ''
     };
   }
-  
+
   // CAMBIAR ZONA - Limpiar zona y volver a preguntar
   if (datosNuevos.cambiar_zona && !datosNuevos.zona) {
     log('📍', 'Cambio de zona detectado - limpiando zona anterior');
     zonaFinal = '';  // Forzar a preguntar zona de nuevo
     nuevaEtapa = 'busqueda';
   }
-  
+
   // CAMBIAR TIPO - Limpiar tipo y usar el nuevo si lo dio
   if (datosNuevos.cambiar_tipo) {
     log('🏠', 'Cambio de tipo detectado');
@@ -518,11 +518,11 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     }
     nuevaEtapa = 'busqueda';
   }
-  
+
   // CAMBIO DE OPINIÓN - Retroceder etapa
   if (datosNuevos.cambio_opinion || datosNuevos.quiere_cancelar) {
     log('🔄', 'Procesando cambio de opinión...');
-    
+
     if (datosNuevos.quiere_cancelar) {
       // Cancelación: volver a interesado o búsqueda
       nuevaEtapa = tipoFinal ? 'busqueda' : 'inicial';
@@ -536,7 +536,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       nuevaEtapa = 'busqueda';
       log('📊', 'Quiere otras opciones. Etapa: busqueda');
     }
-    
+
     const estadoNuevo = {
       ...estadoActual,
       tipo_propiedad: tipoFinal,
@@ -547,11 +547,11 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     };
     return estadoNuevo;
   }
-  
+
   // CLIENTE CON CITA AGENDADA - Manejar diferentes intenciones
   if (estadoActual.etapa === 'cita_agendada') {
     log('📋', 'Cliente con cita agendada, analizando intención...');
-    
+
     if (datosNuevos.quiere_reagendar) {
       // Quiere cambiar la cita → volver a esperando_fecha
       nuevaEtapa = 'esperando_fecha';
@@ -572,7 +572,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       log('📊', 'Consulta sobre cita existente. Etapa: cita_agendada');
     }
     // Si no detectamos intención específica, mantener cita_agendada
-    
+
     const estadoNuevo = {
       ...estadoActual,
       tipo_propiedad: tipoFinal,
@@ -583,9 +583,9 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     };
     return estadoNuevo;
   }
-  
+
   const tieneTodosDatos = tipoFinal && zonaFinal && presupuestoFinal;
-  
+
   // Lógica de etapas (en orden de prioridad)
   if (datosNuevos.tiene_fecha) {
     // Cliente dio fecha → listo para agendar
@@ -604,7 +604,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     nuevaEtapa = 'busqueda';
     log('📊', 'Etapa actualizada: busqueda');
   }
-  
+
   const estadoNuevo = {
     ...estadoActual,
     tipo_propiedad: tipoFinal,
@@ -614,13 +614,13 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     // Agregar nombre si se detectó
     nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
   };
-  
-  log('📋', 'Estado actualizado', { 
-    antes: estadoActual.etapa, 
+
+  log('📋', 'Estado actualizado', {
+    antes: estadoActual.etapa,
     despues: nuevaEtapa,
     datos: { tipo: tipoFinal, zona: zonaFinal, presupuesto: presupuestoFinal }
   });
-  
+
   return estadoNuevo;
 }
 
@@ -629,7 +629,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
 // ============================================================================
 async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_LIMITE) {
   const telefonoNormalizado = normalizarTelefono(telefono);
-  
+
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -641,13 +641,13 @@ async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_
     });
 
     const rows = response.data.values || [];
-    
+
     // Filtrar mensajes del cliente (comparación flexible)
     const mensajesCliente = rows.filter(row => {
       const telEnSheet = row[1] || '';
       return telefonosCoinciden(telEnSheet, telefonoNormalizado);
     });
-    
+
     log('📚', `Mensajes encontrados para ${telefonoNormalizado}: ${mensajesCliente.length} de ${rows.length} total`);
 
     // Tomar los últimos N mensajes (excluyendo el actual que aún no se ha procesado completamente)
@@ -670,7 +670,7 @@ async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_
 // ============================================================================
 async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }) {
   const telefonoNormalizado = normalizarTelefono(telefono);
-  
+
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -681,8 +681,8 @@ async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }
       spreadsheetId,
       range: 'Mensajes!A:E',
       valueInputOption: 'USER_ENTERED',
-      requestBody: { 
-        values: [[timestamp, telefonoNormalizado, direccion, mensaje, messageId || '']] 
+      requestBody: {
+        values: [[timestamp, telefonoNormalizado, direccion, mensaje, messageId || '']]
       }
     });
 
@@ -701,7 +701,7 @@ function construirSystemPrompt(estado) {
   const zona = estado.zona || null;
   const presupuesto = estado.presupuesto || null;
   const etapa = estado.etapa || 'inicial';
-  
+
   const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
   const fechaHoy = ahora.toFormat("EEEE d 'de' MMMM 'de' yyyy", { locale: 'es' });
   const horaActual = ahora.toFormat('HH:mm');
@@ -711,10 +711,10 @@ function construirSystemPrompt(estado) {
   if (!tipo) datosFaltantes.push('tipo de propiedad');
   if (!zona) datosFaltantes.push('zona');
   if (!presupuesto) datosFaltantes.push('presupuesto');
-  
+
   // Determinar la siguiente acción según el estado
   let instruccionEspecifica = '';
-  
+
   if (datosFaltantes.length === 3) {
     instruccionEspecifica = `
 <accion_requerida>
@@ -774,7 +774,7 @@ Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy
     // Calcular días desde la cita
     const fechaCita = estado.fecha_cita ? DateTime.fromFormat(estado.fecha_cita.split(' ')[0], 'yyyy-MM-dd', { zone: CONFIG.TIMEZONE }) : null;
     const diasDesdeCita = fechaCita ? Math.floor(ahora.diff(fechaCita, 'days').days) : 0;
-    
+
     instruccionEspecifica = `
 <accion_requerida>
 Este cliente YA TIENE UNA CITA AGENDADA.
@@ -926,17 +926,24 @@ Hora por defecto si no especifica: 10:00
 Si el mensaje contiene: "foto", "fotos", "imagen", "imagenes", "ver", "muestra", "enseña", "dame fotos"
 
 DEBES HACER ESTO:
-1. USA la herramienta "consultar_documentos" con tipo="${tipo || 'casa'}", zona="${zona || 'general'}", presupuesto="${presupuesto || 'cualquiera'}"
-2. Responde: "¡Claro! Te envío unas fotos de la propiedad 📸" (o similar)
-3. El sistema enviará las imágenes AUTOMÁTICAMENTE
+1. USA la herramienta "consultar_documentos" para obtener los links de las fotos
+2. Cuando la herramienta te devuelva los links, INCLUYE LOS LINKS en tu respuesta de texto
+3. Formatea los links para que sean clickeables, por ejemplo:
+   - "Aquí están las fotos de la propiedad: 📸\n\n🔗 Foto 1: [link]\n🔗 Foto 2: [link]"
+   - O: "Puedes ver las fotos aquí: [link1] [link2]"
 
 ❌ NUNCA digas:
+- "Te envío las fotos" (porque NO se envían como imágenes)
+- "Recibirás las fotos por separado"
+- "El sistema enviará las imágenes"
 - "No puedo mostrar fotos"
-- "No puedo enviar imágenes"
-- "Visita la propiedad para ver"
-- "Solicita el catálogo por correo"
 
-✅ SÍ PUEDES enviar fotos - USA LA HERRAMIENTA consultar_documentos
+✅ SÍ DEBES decir:
+- "Aquí están los links de las fotos: [links]"
+- "Puedes ver las fotos en estos links: [links]"
+- "Da click en estos enlaces para ver las fotos: [links]"
+
+🎯 IMPORTANTE: Solo proporciona los LINKS en texto, el cliente dará click para verlas.
 </REGLA_CRITICA_FOTOS>`;
 }
 
@@ -946,7 +953,7 @@ DEBES HACER ESTO:
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto. IMPORTANTE: Esta herramienta también devuelve URLs de FOTOS de las propiedades. Cuando el cliente pide fotos, USA ESTA HERRAMIENTA - el sistema enviará las imágenes automáticamente.',
+    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto. IMPORTANTE: Esta herramienta devuelve el contenido del documento que incluye URLs de FOTOS de las propiedades. Cuando el cliente pide fotos, USA ESTA HERRAMIENTA y luego INCLUYE LOS LINKS DE LAS FOTOS en tu respuesta de texto para que el cliente pueda dar click y verlas. NO se envían como imágenes, solo como links clickeables.',
     input_schema: {
       type: 'object',
       properties: {
@@ -978,7 +985,7 @@ const tools = [
 // ============================================================================
 async function consultarDocumentos({ tipo, zona, presupuesto }) {
   log('🔍', 'Consultando documentos', { tipo, zona, presupuesto });
-  
+
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/documents.readonly']);
     const docs = google.docs({ version: 'v1', auth });
@@ -997,7 +1004,7 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
     // Verificar si la zona solicitada existe en el documento
     const zonaLower = (zona || '').toLowerCase();
     const zonaEnDocumento = zonaLower ? fullText.toLowerCase().includes(zonaLower) : true;
-    
+
     // Si la zona NO está en el documento, indicarlo claramente
     if (zonaLower && !zonaEnDocumento) {
       log('⚠️', `Zona "${zona}" NO encontrada en documento`);
@@ -1021,8 +1028,8 @@ NO INVENTES propiedades. Solo menciona las que aparecen en el documento.`,
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       content: fullText,
       imagenes: imagenesExtraidas,
       busqueda: { tipo, zona, presupuesto }
@@ -1043,21 +1050,21 @@ function obtenerImagenesPrueba(tipo) {
     'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80', // Casa con jardín
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80', // Casa elegante
   ];
-  
+
   const imagenesTerrenos = [
     'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80', // Terreno verde
     'https://images.unsplash.com/photo-1628624747186-a941c476b7ef?w=800&q=80', // Terreno amplio
     'https://images.unsplash.com/photo-1595880500386-4b33823094d4?w=800&q=80', // Terreno con vista
   ];
-  
+
   const imagenesDepartamentos = [
     'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80', // Depto moderno
     'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80', // Sala depto
     'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80', // Depto con vista
   ];
-  
+
   const tipoLower = (tipo || '').toLowerCase();
-  
+
   if (tipoLower.includes('terreno') || tipoLower.includes('lote')) {
     return imagenesTerrenos;
   } else if (tipoLower.includes('depa') || tipoLower.includes('departamento') || tipoLower.includes('apartamento')) {
@@ -1073,18 +1080,18 @@ function obtenerImagenesPrueba(tipo) {
 // ============================================================================
 function extraerImagenesDeTexto(texto) {
   const imagenes = [];
-  
+
   // Patrones para detectar URLs de imágenes
   // Formato 1: IMAGEN: https://...
   // Formato 2: Foto: https://...
   // Formato 3: URLs directas de imágenes (.jpg, .jpeg, .png, .webp)
-  
+
   const patronImagen = /(?:IMAGEN|FOTO|IMG|IMAGE):\s*(https?:\/\/[^\s]+)/gi;
   const patronUrlDirecta = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))/gi;
   const patronDrive = /(https?:\/\/drive\.google\.com\/[^\s]+)/gi;
-  
+
   let match;
-  
+
   // Buscar formato IMAGEN: url
   while ((match = patronImagen.exec(texto)) !== null) {
     const url = match[1].trim();
@@ -1093,7 +1100,7 @@ function extraerImagenesDeTexto(texto) {
       log('🖼️', `Imagen encontrada (etiqueta, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
-  
+
   // Buscar URLs directas de imágenes
   while ((match = patronUrlDirecta.exec(texto)) !== null) {
     const url = match[1].trim();
@@ -1102,7 +1109,7 @@ function extraerImagenesDeTexto(texto) {
       log('🖼️', `Imagen encontrada (URL directa, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
-  
+
   // Buscar URLs de Google Drive (convertir a formato directo)
   while ((match = patronDrive.exec(texto)) !== null) {
     let url = match[1].trim();
@@ -1117,7 +1124,7 @@ function extraerImagenesDeTexto(texto) {
       }
     }
   }
-  
+
   return imagenes;
 }
 
@@ -1127,14 +1134,14 @@ function extraerImagenesDeTexto(texto) {
 async function enviarMensajeConImagen(client, from, to, body, mediaUrl) {
   try {
     log('🖼️', `Enviando imagen: ${mediaUrl.substring(0, 50)}...`);
-    
+
     const mensaje = await client.messages.create({
       from: from,
       to: to,
       body: body || '',
       mediaUrl: [mediaUrl]
     });
-    
+
     log('✅', `Imagen enviada exitosamente. SID: ${mensaje.sid}`);
     return { success: true, sid: mensaje.sid };
   } catch (error) {
@@ -1149,17 +1156,17 @@ async function enviarMensajeConImagen(client, from, to, body, mediaUrl) {
 async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 }) {
   log('📅', '=== INICIANDO AGENDAR CITA ===');
   log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos });
-  
+
   try {
     log('🔑', 'Obteniendo autenticación de Google...');
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar']);
-    
+
     log('📅', 'Creando cliente de Calendar...');
     const calendar = google.calendar({ version: 'v3', auth });
-    
+
     const calendarId = process.env.GOOGLE_CALENDAR_ID;
     log('📅', `Calendar ID configurado: ${calendarId}`);
-    
+
     if (!calendarId) {
       log('❌', 'GOOGLE_CALENDAR_ID no está definido!');
       return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
@@ -1181,11 +1188,11 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     const [horas, minutos] = hora_inicio.split(':').map(Number);
 
     const inicio = DateTime.fromObject(
-      { year, month, day, hour: horas, minute: minutos }, 
+      { year, month, day, hour: horas, minute: minutos },
       { zone: CONFIG.TIMEZONE }
     );
     const fin = inicio.plus({ minutes: duracion_minutos });
-    
+
     log('📅', `Inicio: ${inicio.toISO()}, Fin: ${fin.toISO()}`);
 
     const eventData = {
@@ -1209,7 +1216,7 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     log('✅', `Organizador: ${result.data.organizer?.email}`);
     log('✅', `Creador: ${result.data.creator?.email}`);
     log('✅', `Status: ${result.data.status}`);
-    
+
     // Verificar que el evento se creó listando eventos
     try {
       const eventCheck = await calendar.events.get({
@@ -1220,9 +1227,9 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
     } catch (verifyError) {
       log('⚠️', `No se pudo verificar el evento: ${verifyError.message}`);
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       mensaje: `Cita agendada exitosamente para el ${inicio.toFormat("d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}`,
       eventLink: result.data.htmlLink,
       eventId: result.data.id,
@@ -1243,17 +1250,17 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
 // ============================================================================
 function construirMensajesParaClaude(historial, mensajeActual, estado) {
   let messages = [];
-  
+
   // Agregar historial previo con alternancia correcta
   if (historial.length > 0) {
     let lastRole = null;
-    
+
     for (const msg of historial) {
       const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
       const contenido = msg.mensaje?.trim();
-      
+
       if (!contenido) continue;
-      
+
       // Fusionar mensajes consecutivos del mismo rol
       if (role === lastRole && messages.length > 0) {
         messages[messages.length - 1].content += '\n' + contenido;
@@ -1262,24 +1269,24 @@ function construirMensajesParaClaude(historial, mensajeActual, estado) {
         lastRole = role;
       }
     }
-    
+
     // Asegurar que termine en 'assistant' para que el nuevo 'user' alterne
     while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
       messages.pop();
     }
   }
-  
+
   // Agregar mensaje actual con contexto de estado
   const tipo = estado.tipo_propiedad || 'NO_DEFINIDO';
   const zona = estado.zona || 'NO_DEFINIDO';
   const presupuesto = estado.presupuesto || 'NO_DEFINIDO';
-  
+
   const mensajeConContexto = `[Estado actual del cliente: tipo=${tipo}, zona=${zona}, presupuesto=${presupuesto}]
 
 Mensaje del cliente: ${mensajeActual}`;
-  
+
   messages.push({ role: 'user', content: mensajeConContexto });
-  
+
   return messages;
 }
 
@@ -1292,24 +1299,24 @@ export default async function handler(req, res) {
   }
 
   const { Body, From, MessageSid } = req.body;
-  
+
   if (!Body || !From) {
     return res.status(400).json({ error: 'Faltan parámetros Body o From' });
   }
 
   const telefono = normalizarTelefono(From);
-  
+
   log('═══════════════════════════════════════════════════════════════');
   log('📨', `NUEVO MENSAJE de ${telefono}`);
   log('📝', `Contenido: "${Body}"`);
   log('═══════════════════════════════════════════════════════════════');
 
   // Guardar mensaje entrante
-  await guardarMensajeEnSheet({ 
-    telefono, 
-    direccion: 'inbound', 
-    mensaje: Body, 
-    messageId: MessageSid 
+  await guardarMensajeEnSheet({
+    telefono,
+    direccion: 'inbound',
+    mensaje: Body,
+    messageId: MessageSid
   });
 
   try {
@@ -1324,17 +1331,17 @@ export default async function handler(req, res) {
       log('⏰', 'Sesión expirada, reseteando estado automáticamente');
       estadoActual = await resetearEstadoCliente(telefono);
     }
-    
+
     // 2.5 Verificar cliente inactivo para seguimiento (7+ días sin interacción)
     const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
     if (estadoActual.ultima_actualizacion && estadoActual.etapa !== 'inicial') {
       const ultimaInteraccion = DateTime.fromFormat(
-        estadoActual.ultima_actualizacion.split(' ')[0], 
-        'yyyy-MM-dd', 
+        estadoActual.ultima_actualizacion.split(' ')[0],
+        'yyyy-MM-dd',
         { zone: CONFIG.TIMEZONE }
       );
       const diasInactivo = Math.floor(ahora.diff(ultimaInteraccion, 'days').days);
-      
+
       if (diasInactivo >= 7 && estadoActual.etapa !== 'seguimiento') {
         log('📅', `Cliente inactivo por ${diasInactivo} días. Cambiando a seguimiento.`);
         estadoActual.etapa = 'seguimiento';
@@ -1346,10 +1353,10 @@ export default async function handler(req, res) {
     // 3. Procesar comandos especiales
     log('🎯', 'PASO 2: Verificando comandos especiales...');
     const comandoResult = await procesarComandoEspecial(Body, telefono, estadoActual);
-    
+
     if (comandoResult.esComando) {
       log('⚡', 'Comando especial detectado, respondiendo directamente');
-      
+
       // Enviar respuesta del comando
       const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
       const twilioMsg = await client.messages.create({
@@ -1357,14 +1364,14 @@ export default async function handler(req, res) {
         to: From,
         body: comandoResult.respuesta
       });
-      
-      await guardarMensajeEnSheet({ 
-        telefono, 
-        direccion: 'outbound', 
-        mensaje: comandoResult.respuesta, 
-        messageId: twilioMsg.sid 
+
+      await guardarMensajeEnSheet({
+        telefono,
+        direccion: 'outbound',
+        mensaje: comandoResult.respuesta,
+        messageId: twilioMsg.sid
       });
-      
+
       log('✅', 'Comando procesado exitosamente');
       return res.status(200).json({ success: true, comando: true });
     }
@@ -1376,13 +1383,13 @@ export default async function handler(req, res) {
 
     // 5. Actualizar estado con datos detectados
     const estadoActualizado = actualizarEstadoConDatos(estadoActual, datosDetectados);
-    
+
     // Si hay cambios, guardar inmediatamente
     if (Object.keys(datosDetectados).length > 0) {
       log('💾', 'PASO 4: Guardando estado actualizado...');
       await guardarEstadoConversacion(estadoActualizado);
     }
-    
+
     log('📋', 'Estado final', estadoActualizado);
 
     // 6. Obtener historial
@@ -1414,14 +1421,14 @@ export default async function handler(req, res) {
     const MAX_ITERACIONES = 3;
     let citaAgendadaInfo = null;  // Para guardar info de la cita
     let imagenesParaEnviar = [];  // DESHABILITADO: Ya no enviamos fotos automáticamente
-    
+
     // 10.1 DESHABILITADO: Ya no forzamos envío de fotos
     // El agente solo proporcionará los links en texto si el cliente los pide
     const pideFotos = false; // Deshabilitado
     const claudeLlamoHerramienta = response.stop_reason === 'tool_use';
-    
+
     log('🖼️', `Envío de fotos DESHABILITADO - solo se muestran links en texto`);
-    
+
     /* DESHABILITADO - Ya no enviamos imágenes automáticamente
     if (pideFotos && !claudeLlamoHerramienta) {
       log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
@@ -1449,15 +1456,15 @@ export default async function handler(req, res) {
       }
     }
     */
-    
+
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
       const toolUse = response.content.find(b => b.type === 'tool_use');
-      
+
       if (!toolUse) break;
 
       log('🔧', `Tool call #${iteraciones}: ${toolUse.name}`, toolUse.input);
-      
+
       let toolResult;
       if (toolUse.name === 'consultar_documentos') {
         toolResult = await consultarDocumentos(toolUse.input);
@@ -1484,13 +1491,13 @@ export default async function handler(req, res) {
       }
 
       messages.push({ role: 'assistant', content: response.content });
-      messages.push({ 
-        role: 'user', 
-        content: [{ 
-          type: 'tool_result', 
-          tool_use_id: toolUse.id, 
-          content: JSON.stringify(toolResult) 
-        }] 
+      messages.push({
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: JSON.stringify(toolResult)
+        }]
       });
 
       response = await anthropic.messages.create({
@@ -1527,7 +1534,7 @@ export default async function handler(req, res) {
       await guardarEstadoConversacion(estadoActualizado);
       log('📅', 'Estado actualizado: cita_agendada con fecha:', citaAgendadaInfo);
     }
-    
+
     // 11. Detectar cambio de etapa basado en la respuesta
     const respuestaLower = respuestaTexto.toLowerCase();
     if (respuestaLower.includes('qué día') || respuestaLower.includes('qué fecha') || respuestaLower.includes('qué hora')) {
@@ -1542,7 +1549,7 @@ export default async function handler(req, res) {
     // 12. Enviar por WhatsApp
     log('📤', 'PASO 8: Enviando respuesta por WhatsApp...');
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    
+
     // Primero enviar el mensaje de texto
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
@@ -1554,7 +1561,7 @@ export default async function handler(req, res) {
     // DESHABILITADO: Ya no enviamos imágenes como media messages.
     // Los links deben ir en el texto si el cliente los pide.
     log('🖼️', `=== ENVÍO DE IMÁGENES DESHABILITADO ===`);
-    
+
     /* CÓDIGO DE IMÁGENES COMPLETAMENTE DESHABILITADO
     if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
       // ... código comentado ...
@@ -1562,22 +1569,22 @@ export default async function handler(req, res) {
     */
 
     // 13. Guardar respuesta en historial
-    await guardarMensajeEnSheet({ 
-      telefono, 
-      direccion: 'outbound', 
-      mensaje: respuestaTexto, 
-      messageId: twilioMsg.sid 
+    await guardarMensajeEnSheet({
+      telefono,
+      direccion: 'outbound',
+      mensaje: respuestaTexto,
+      messageId: twilioMsg.sid
     });
 
     log('✅', 'PROCESO COMPLETADO EXITOSAMENTE');
     log('═══════════════════════════════════════════════════════════════');
-    
+
     return res.status(200).json({ success: true });
 
   } catch (error) {
-    log('❌', 'ERROR CRÍTICO', { 
-      message: error.message, 
-      stack: error.stack?.substring(0, 500) 
+    log('❌', 'ERROR CRÍTICO', {
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
     });
     return res.status(500).json({ error: error.message });
   }
