@@ -817,23 +817,19 @@ Tu objetivo:
 
   return `
 ###############################################################
-# RESTRICCIÓN CRÍTICA - LEER ANTES DE CUALQUIER RESPUESTA #
+#   REGLA FUNDAMENTAL - INFORMACIÓN SOLO DEL DOCUMENTO        #
 ###############################################################
 
-⛔ PROHIBIDO INVENTAR INFORMACIÓN:
-- NO menciones "Zapopan", "Guadalajara", "CDMX" ni NINGUNA ciudad real de México
-- Las ÚNICAS ubicaciones válidas son las que aparecen en el documento de Google Docs
-- Si el cliente pregunta por una zona que NO está en el documento, responde:
-  "Por el momento no tenemos propiedades en esa zona. Nuestras opciones están en [zonas del documento]. ¿Te gustaría conocerlas?"
+📋 TU ÚNICA FUENTE DE INFORMACIÓN ES EL DOCUMENTO DE GOOGLE DOCS.
+   - SIEMPRE usa la herramienta "consultar_documentos" para buscar propiedades
+   - SOLO menciona propiedades y ubicaciones que EXISTAN en el documento
+   - Si una zona NO aparece en el documento = NO tienes propiedades ahí
+   - NUNCA inventes propiedades, precios, ni ubicaciones
 
-⛔ ZONAS DEL DOCUMENTO (las únicas que puedes mencionar):
-- San Marcos del Valle
-- Puerto Sereno  
-- Riveras Claras
-- Valle Nuevo
-- Lagos Dorados
-
-Si el cliente menciona CUALQUIER otra ciudad → "No tenemos disponibilidad en esa zona"
+🔍 CUANDO EL CLIENTE PREGUNTE POR UNA ZONA:
+   1. Usa consultar_documentos con esa zona
+   2. Si la zona aparece en el documento → muestra esas propiedades
+   3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
 
 ###############################################################
 
@@ -847,17 +843,13 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 - Objetivo: Ayudar al cliente a encontrar su propiedad ideal y agendar visitas
 </perfil>
 
-<REGLA_INFORMACION_CRITICA>
-🚨 REGLA ABSOLUTA - LEE ESTO PRIMERO:
-1. SIEMPRE usa la herramienta consultar_documentos ANTES de responder sobre propiedades
-2. Si el cliente pregunta por una zona (ej: Zapopan, Guadalajara, CDMX, etc.):
-   - PRIMERO consulta el documento
-   - Si la zona NO aparece en el documento, responde: "Actualmente no tenemos propiedades disponibles en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
-   - NUNCA inventes propiedades en zonas que no existen en el documento
-3. SOLO menciona ubicaciones que EXISTAN en el documento de Google Docs
-4. Si no encuentras información, NO LA INVENTES - di que no tienes disponibilidad en esa zona
-5. Las únicas propiedades válidas son las que aparecen en consultar_documentos
-</REGLA_INFORMACION_CRITICA>
+<REGLA_INFORMACION>
+🚨 REGLA ABSOLUTA:
+1. SIEMPRE usa "consultar_documentos" ANTES de hablar de propiedades
+2. Si el resultado dice "zona no encontrada" o la zona no aparece → di que no tienes disponibilidad
+3. SOLO menciona lo que EXISTE en el documento
+4. Si inventas información, el cliente recibirá datos falsos - esto es INACEPTABLE
+</REGLA_INFORMACION>
 
 <datos_del_cliente>
 - Teléfono: ${estado.telefono}
@@ -1004,23 +996,23 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
 
     // Verificar si la zona solicitada existe en el documento
     const zonaLower = (zona || '').toLowerCase();
-    const zonasReales = ['zapopan', 'guadalajara', 'cdmx', 'monterrey', 'tijuana', 'cancun', 'puebla', 'leon', 'merida', 'queretaro'];
-    const esZonaRealMexico = zonasReales.some(z => zonaLower.includes(z));
-    const zonaEnDocumento = fullText.toLowerCase().includes(zonaLower);
+    const zonaEnDocumento = zonaLower ? fullText.toLowerCase().includes(zonaLower) : true;
     
-    // Si pide una zona real de México que NO está en el documento
-    if (esZonaRealMexico && !zonaEnDocumento) {
-      log('⚠️', `Zona "${zona}" NO encontrada en documento - es ciudad real de México`);
+    // Si la zona NO está en el documento, indicarlo claramente
+    if (zonaLower && !zonaEnDocumento) {
+      log('⚠️', `Zona "${zona}" NO encontrada en documento`);
       return {
         success: true,
-        content: `⚠️ NO TENEMOS PROPIEDADES EN ${zona.toUpperCase()}. 
-        
-Las zonas donde SÍ tenemos disponibilidad son las que aparecen en nuestro catálogo. 
-Por favor responde al cliente: "Actualmente no tenemos propiedades disponibles en ${zona}. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
+        content: `IMPORTANTE: La zona "${zona}" NO aparece en nuestro catálogo de propiedades.
 
-NO INVENTES propiedades en ${zona}.`,
+El documento contiene las siguientes propiedades:
+${fullText}
+
+INSTRUCCIÓN: Revisa el documento completo arriba. Si "${zona}" no aparece en ninguna propiedad, debes responder: "Actualmente no tenemos propiedades disponibles en ${zona}. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
+
+NO INVENTES propiedades. Solo menciona las que aparecen en el documento.`,
         imagenes: [],
-        zona_no_disponible: true,
+        zona_no_encontrada: zona,
         busqueda: { tipo, zona, presupuesto }
       };
     }
@@ -1028,12 +1020,6 @@ NO INVENTES propiedades en ${zona}.`,
     // Extraer URLs de imágenes del documento
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
-
-    // DESHABILITADO: Ya no usamos imágenes de prueba
-    // if (imagenesExtraidas.length === 0) {
-    //   log('🖼️', 'Usando imágenes de prueba (demo)');
-    //   imagenesExtraidas = obtenerImagenesPrueba(tipo);
-    // }
 
     return { 
       success: true, 
@@ -1523,40 +1509,7 @@ export default async function handler(req, res) {
       .join('')
       .trim();
 
-    log('💬', 'Respuesta de Claude (original)', { respuesta: respuestaTexto.substring(0, 200) + '...' });
-
-    // ⛔ FILTRO CRÍTICO: Detectar y bloquear menciones de ciudades reales de México
-    const ciudadesProhibidas = [
-      'zapopan', 'guadalajara', 'cdmx', 'ciudad de méxico', 'monterrey', 
-      'tijuana', 'cancun', 'cancún', 'puebla', 'leon', 'león', 'merida', 
-      'mérida', 'queretaro', 'querétaro', 'toluca', 'aguascalientes',
-      'morelia', 'chihuahua', 'culiacan', 'culiacán', 'hermosillo',
-      'saltillo', 'mexicali', 'veracruz', 'acapulco', 'oaxaca', 'tuxtla',
-      'villahermosa', 'tampico', 'reynosa', 'matamoros', 'nuevo laredo',
-      'juarez', 'juárez', 'ensenada', 'mazatlan', 'mazatlán', 'los cabos',
-      'playa del carmen', 'cuernavaca', 'pachuca', 'zacatecas', 'durango',
-      'colima', 'tepic', 'la paz', 'campeche', 'chetumal', 'jalisco',
-      'nuevo leon', 'nuevo león', 'estado de mexico', 'estado de méxico'
-    ];
-    
-    const respuestaLower = respuestaTexto.toLowerCase();
-    const ciudadMencionada = ciudadesProhibidas.find(ciudad => respuestaLower.includes(ciudad));
-    
-    if (ciudadMencionada) {
-      log('⛔', `BLOQUEADO: Claude mencionó ciudad prohibida "${ciudadMencionada}"`);
-      // Reemplazar la respuesta completa
-      respuestaTexto = `Por el momento no tenemos propiedades disponibles en esa zona. 🏠
-
-Nuestras opciones están en:
-• San Marcos del Valle
-• Puerto Sereno
-• Riveras Claras
-• Valle Nuevo
-• Lagos Dorados
-
-¿Te gustaría conocer las propiedades que tenemos en estas zonas?`;
-      log('✅', 'Respuesta reemplazada por mensaje de no disponibilidad');
-    }
+    log('💬', 'Respuesta de Claude', { respuesta: respuestaTexto.substring(0, 200) + '...' });
 
     // 10.2 DESHABILITADO: Ya no enviamos fotos automáticamente
     /*
