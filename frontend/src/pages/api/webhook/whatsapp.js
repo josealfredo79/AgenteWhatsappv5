@@ -1040,30 +1040,16 @@ NO INVENTES propiedades. Solo menciona las que aparecen en el documento.`,
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
 
-    // LIMPIAR las líneas con URLs de fotos del contenido
-    // Esto evita que Claude incluya automáticamente las fotos al mostrar propiedades
-    // Las URLs quedan disponibles en el campo 'imagenes' para cuando el cliente las pida
-    let contenidoSinFotos = fullText
-      .split('\n')
-      .filter(line => {
-        // Eliminar líneas que empiezan con FOTO:, IMAGEN:, IMG:, IMAGE:
-        if (/^\s*(FOTO|IMAGEN|IMG|IMAGE):/i.test(line)) {
-          return false;
-        }
-        // Eliminar líneas que son solo URLs de imágenes
-        if (/^\s*https?:\/\/.*\.(jpg|jpeg|png|webp|gif)/i.test(line)) {
-          return false;
-        }
-        return true;
-      })
-      .join('\n');
+    // NO eliminamos las líneas de fotos para mantener el contexto
+    // Claude necesita ver qué foto pertenece a qué propiedad
+    // Las reglas del System Prompt ya evitan que las envíe automáticamente
 
-    log('📝', `Contenido limpiado. Fotos removidas del texto para Claude.`);
+    log('📝', `Contenido obtenido. Longitud: ${fullText.length} caracteres`);
 
     return {
       success: true,
-      content: contenidoSinFotos,  // Contenido SIN URLs de fotos
-      imagenes: imagenesExtraidas,  // URLs disponibles para cuando el cliente las pida
+      content: fullText,  // Contenido COMPLETO con URLs de fotos en su lugar correcto
+      imagenes: [],       // Ya no enviamos lista separada para evitar confusión
       busqueda: { tipo, zona, presupuesto }
     };
   } catch (error) {
@@ -1509,20 +1495,9 @@ export default async function handler(req, res) {
 
       messages.push({ role: 'assistant', content: response.content });
 
-      // CRÍTICO: Enviar contenido + imágenes pero con INSTRUCCIÓN DE SEGURIDAD
-      // Así Claude tiene los links para cuando se pidan, pero sabe que no debe usarlos antes
-      let contentParaClaude;
-      if (toolUse.name === 'consultar_documentos' && toolResult.success) {
-        contentParaClaude = JSON.stringify({
-          informacion: toolResult.content,
-          FOTOS_DISPONIBLES: toolResult.imagenes,
-          ⚠️_REGLA_SEGURIDAD_⚠️: "NO INCLUIR LOS LINKS DE FOTOS EN LA RESPUESTA AUTOMÁTICA. Solo mostrarlos si el cliente dice explícitamente: 'fotos', 'imágenes', 'ver', etc."
-        });
-        log('📝', 'Enviando a Claude content + fotos con advertencia de seguridad');
-      } else {
-        // Para otras herramientas (agendar_cita): enviar el resultado completo
-        contentParaClaude = JSON.stringify(toolResult);
-      }
+      // CRÍTICO: Enviar el resultado tal cual
+      // Ahora el contenido incluye las fotos en su lugar correcto (asociadas a cada propiedad)
+      let contentParaClaude = JSON.stringify(toolResult);
 
       messages.push({
         role: 'user',

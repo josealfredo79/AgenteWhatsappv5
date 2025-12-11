@@ -286,6 +286,12 @@ https://images.unsplash.com/photo-1600596542815-ffad4c1539a9
 
 ---
 
-**Versión:** v5.2.1  
-**Estado:** ✅ IMPLEMENTADO - LISTO PARA PROBAR  
-**Última actualización:** 2025-12-10 15:15
+**Versión:** v5.4.1 (Corrección Asociación de Fotos)
+**Estado:** ✅ IMPLEMENTADO
+**Última actualización:** 2025-12-10 22:55
+
+### 🔧 Corrección Adicional: Asociación Correcta de Fotos
+**Problema:** El agente enviaba fotos de la Propiedad B cuando hablaba de la Propiedad A.
+**Causa:** El código anterior separaba todas las fotos del texto y se las daba al agente en una lista desordenada, perdiendo el contexto de a qué casa pertenecía cada foto.
+**Solución:** Se modificó `consultar_documentos` para dejar los links de las fotos **dentro del texto original**, justo debajo de cada propiedad. Ahora el agente sabe exactamente qué fotos corresponden a qué casa.
+
