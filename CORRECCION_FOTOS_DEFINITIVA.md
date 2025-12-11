@@ -261,6 +261,11 @@ git push origin main
 
 ---
 
-**Versión:** v5.2.2  
+**Versión:** v5.4.1 (Corrección Asociación)
 **Estado:** ✅ IMPLEMENTADO - LISTO PARA DEPLOY  
-**Última actualización:** 2025-12-10 15:35
+**Última actualización:** 2025-12-10 23:10
+
+### 🔧 Corrección Final: Asociación Correcta (v5.4.0)
+**Problema:** Al "limpiar" las fotos del texto (solución anterior), el agente perdía el contexto de qué foto pertenecía a qué casa, enviando fotos equivocadas.
+**Solución Real:** Se revirtió la limpieza agresiva. Ahora el agente **ve las fotos en el texto** (justo debajo de cada propiedad) pero las reglas estrictas del prompt (`REGLA_CRITICA_SIN_FOTOS_AUTOMATICAS`) impiden que las envíe si no se piden.
+**Resultado:** Fotos correctas + No envío automático = Comportamiento Perfecto.

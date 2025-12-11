@@ -140,7 +140,12 @@ async function obtenerEstadoConversacion(telefono) {
         fecha_cita: estadoRow[8] || '',
         propiedad_interes: estadoRow[9] || '',
         primer_contacto: estadoRow[10] || '',
-        notas: estadoRow[11] || ''
+        notas: estadoRow[11] || '',
+        email: estadoRow[15] || '', // Nueva columna P para Email
+        // Nuevos campos de Lead Scoring
+        score: parseInt(estadoRow[12] || '0', 10),
+        calificacion: estadoRow[13] || 'COLD ❄️',
+        accion_sugerida: estadoRow[14] || ''
       };
       log('✅', 'Estado encontrado', estado);
       return estado;
@@ -159,7 +164,11 @@ async function obtenerEstadoConversacion(telefono) {
       fecha_cita: '',
       propiedad_interes: '',
       primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
-      notas: ''
+      notas: '',
+      email: '',
+      score: 0,
+      calificacion: 'COLD ❄️',
+      accion_sugerida: 'Perfilamiento inicial'
     };
   } catch (error) {
     log('❌', 'Error al obtener estado', { error: error.message });
@@ -175,7 +184,10 @@ async function obtenerEstadoConversacion(telefono) {
       fecha_cita: '',
       propiedad_interes: '',
       primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
-      notas: ''
+      notas: '',
+      score: 0,
+      calificacion: 'COLD ❄️',
+      accion_sugerida: 'Error de lectura'
     };
   }
 }
@@ -218,14 +230,20 @@ async function guardarEstadoConversacion(estado) {
       estado.fecha_cita || '',                                // I: Fecha de cita agendada
       estado.propiedad_interes || '',                         // J: Propiedad de interés
       estado.primer_contacto || timestamp.split(' ')[0],      // K: Primer contacto
-      estado.notas || ''                                      // L: Notas adicionales
+      estado.notas || '',                                     // L: Notas adicionales
+      // NUEVO: Lead Scoring
+      estado.score || 0,                                      // M: Puntaje numérico
+      estado.score || 0,                                      // M: Puntaje numérico
+      estado.calificacion || 'COLD ❄️',                       // N: Clasificación
+      estado.accion_sugerida || 'Perfilamiento',              // O: Acción recomendada
+      estado.email || ''                                      // P: Email del cliente
     ];
 
     if (rowIndex > -1) {
       log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Estados!A${rowIndex + 1}:L${rowIndex + 1}`,
+        range: `Estados!A${rowIndex + 1}:P${rowIndex + 1}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -233,7 +251,7 @@ async function guardarEstadoConversacion(estado) {
       log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Estados!A:L',
+        range: 'Estados!A:P',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -313,10 +331,11 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
     const tipo = estado.tipo_propiedad || '❌ No definido';
     const zona = estado.zona || '❌ No definida';
     const presupuesto = estado.presupuesto || '❌ No definido';
+    const email = estado.email || '❌ No definido'; // Added email
 
     return {
       esComando: true,
-      respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
+      respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n📧 Email: ${email}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
     };
   }
 
@@ -335,6 +354,13 @@ function detectarDatosEnMensaje(mensaje) {
   if (matchNombre) {
     datos.nombre_cliente = matchNombre[1].trim();
     log('👤', `Nombre detectado: ${datos.nombre_cliente}`);
+  }
+
+  // DETECTAR EMAIL
+  const matchEmail = mensaje.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
+  if (matchEmail) {
+    datos.email = matchEmail[0].trim();
+    log('📧', `Email detectado: ${datos.email}`);
   }
 
   // DETECTAR CAMBIO DE OPINIÓN
@@ -477,6 +503,50 @@ function detectarDatosEnMensaje(mensaje) {
 }
 
 // ============================================================================
+// LEAD SCORING: SISTEMA DE CALIFICACIÓN
+// ============================================================================
+function calcularLeadScore(estado) {
+  let score = 0;
+
+  // 1. IDENTIDAD (+40 pts máx)
+  if (estado.nombre_cliente && estado.nombre_cliente.length > 2) score += 10;
+  if (estado.presupuesto) score += 20; // Dato crítico
+  if (estado.zona) score += 10;
+  if (estado.tipo_propiedad) score += 10;
+
+  // 2. COMPORTAMIENTO E INTENCIÓN
+  if (estado.etapa === 'interesado') score += 15; // Ya vio opciones y le gustó una
+  if (estado.etapa === 'esperando_fecha') score += 25; // Intención clara de visita
+  if (estado.etapa === 'agendar') score += 20; // Pidió agendar
+  if (estado.email) score += 15; // Email suma puntos de confianza
+
+  // 3. GAME CHANGER (Cita confirmada)
+  if (estado.etapa === 'cita_agendada') return 100; // Cliente CERRADO para visita
+
+  // Cap para no exceder 95 sin cita
+  return Math.min(score, 95);
+}
+
+function obtenerClasificacion(score) {
+  if (score >= 80) return { label: 'HOT 🔥', accion: '⚠️ CIERRE PRIORITARIO: Agendar visita YA' };
+  if (score >= 50) return { label: 'WARM ⛅', accion: 'Seguimiento semanal: Enviar nuevas opciones' };
+  return { label: 'COLD ❄️', accion: 'Nutrir: Enviar contenido de valor mensual' };
+}
+
+// Helper para inyectar score antes de retornar
+function finalizarEstadoConScore(estado) {
+  const score = calcularLeadScore(estado);
+  const clasificacion = obtenerClasificacion(score);
+
+  return {
+    ...estado,
+    score,
+    calificacion: clasificacion.label,
+    accion_sugerida: clasificacion.accion
+  };
+}
+
+// ============================================================================
 // ACTUALIZAR ESTADO CON NUEVOS DATOS DETECTADOS
 // ============================================================================
 function actualizarEstadoConDatos(estadoActual, datosNuevos) {
@@ -490,7 +560,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
   // NUEVA BÚSQUEDA COMPLETA - Limpiar todo y empezar de cero
   if (datosNuevos.nueva_busqueda && !datosNuevos.tipo_propiedad && !datosNuevos.zona) {
     log('🆕', 'Nueva búsqueda detectada - limpiando datos anteriores');
-    return {
+    return finalizarEstadoConScore({
       ...estadoActual,
       tipo_propiedad: '',
       zona: '',
@@ -498,7 +568,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       etapa: 'inicial',
       propiedad_interes: '',
       fecha_cita: ''
-    };
+    });
   }
 
   // CAMBIAR ZONA - Limpiar zona y volver a preguntar
@@ -545,7 +615,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       etapa: nuevaEtapa,
       cambio_opinion: true
     };
-    return estadoNuevo;
+    return finalizarEstadoConScore(estadoNuevo);
   }
 
   // CLIENTE CON CITA AGENDADA - Manejar diferentes intenciones
@@ -579,16 +649,17 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       zona: zonaFinal,
       presupuesto: presupuestoFinal,
       etapa: nuevaEtapa,
-      nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
+      nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || '',
+      email: datosNuevos.email || estadoActual.email || ''
     };
-    return estadoNuevo;
+    return finalizarEstadoConScore(estadoNuevo);
   }
 
   const tieneTodosDatos = tipoFinal && zonaFinal && presupuestoFinal;
 
   // Lógica de etapas (en orden de prioridad)
   if (datosNuevos.tiene_fecha) {
-    // Cliente dio fecha → listo para agendar
+    // Cliente dio fecha → listo para agendar (PERO validar email en prompt)
     nuevaEtapa = 'esperando_fecha';
     log('📊', 'Etapa actualizada: esperando_fecha');
   } else if (datosNuevos.quiere_agendar && estadoActual.etapa !== 'esperando_fecha') {
@@ -611,8 +682,9 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     zona: zonaFinal,
     presupuesto: presupuestoFinal,
     etapa: nuevaEtapa,
-    // Agregar nombre si se detectó
-    nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
+    // Agregar nombre y email si se detectaron
+    nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || '',
+    email: datosNuevos.email || estadoActual.email || ''
   };
 
   log('📋', 'Estado actualizado', {
@@ -621,7 +693,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     datos: { tipo: tipoFinal, zona: zonaFinal, presupuesto: presupuestoFinal }
   });
 
-  return estadoNuevo;
+  return finalizarEstadoConScore(estadoNuevo);
 }
 
 // ============================================================================
@@ -763,13 +835,22 @@ El cliente QUIERE AGENDAR. Tu ÚNICA respuesta debe ser:
 NO des más información. NO repitas detalles. SOLO pregunta la fecha.
 </accion_requerida>`;
   } else if (etapa === 'esperando_fecha') {
-    instruccionEspecifica = `
+    if (!estado.email) {
+      instruccionEspecifica = `
 <accion_requerida>
-Estás esperando que el cliente dé fecha/hora.
-Cuando la dé, USA "agendar_cita" inmediatamente.
-Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
-"pasado mañana" = ${ahora.plus({ days: 2 }).toFormat('yyyy-MM-dd')}
+El cliente quiere agendar, pero FALTA SU CORREO.
+Di: "¡Excelente! Para confirmar tu cita y enviarte la ubicación exacta 📍, necesito que me compartas tu correo electrónico, por favor."
+NO confirmes la cita sin el correo.
 </accion_requerida>`;
+    } else {
+      instruccionEspecifica = `
+<accion_requerida>
+Estás esperando fecha/hora y YA TIENES el correo (${estado.email}).
+Cuando el cliente confirme la hora, USA "agendar_cita" inmediatamente.
+Al confirmar, menciona: "Te he enviado la ubicación a tu correo y por aquí."
+Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
+</accion_requerida>`;
+    }
   } else if (etapa === 'cita_agendada') {
     // Calcular días desde la cita
     const fechaCita = estado.fecha_cita ? DateTime.fromFormat(estado.fecha_cita.split(' ')[0], 'yyyy-MM-dd', { zone: CONFIG.TIMEZONE }) : null;
