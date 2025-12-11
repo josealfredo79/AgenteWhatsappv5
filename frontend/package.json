@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-frontend",
-  "version": "5.4.2",
+  "version": "5.5.0",
   "private": true,
   "engines": {
     "node": ">=18.0.0"
@@ -10,7 +10,7 @@
     "dev": "NODE_ENV=development node server.js",
     "test": "jest --runInBand --detectOpenHandles",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
+    "start": "echo '🚀 INICIANDO V5.5.0...' && NODE_ENV=production node server.js",
     "lint": "eslint"
   },
   "dependencies": {
