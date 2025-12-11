@@ -1321,6 +1321,9 @@ export default async function handler(req, res) {
   const telefono = normalizarTelefono(From);
 
   log('═══════════════════════════════════════════════════════════════');
+  log('🚀', 'VERSION ACTUAL: v5.4.0 (COPIA LIMPIA - SIN ENVIO DE FOTOS)');
+  log('🚫', 'SISTEMA DE FOTOS: DESACTIVADO Y CÓDIGO ELIMINADO');
+  log('═══════════════════════════════════════════════════════════════');
   log('📨', `NUEVO MENSAJE de ${telefono}`);
   log('📝', `Contenido: "${Body}"`);
   log('═══════════════════════════════════════════════════════════════');
