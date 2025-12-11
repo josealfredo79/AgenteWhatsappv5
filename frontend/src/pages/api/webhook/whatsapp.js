@@ -837,17 +837,11 @@ Eres Ana, asesora inmobiliaria profesional.
 Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 
 <perfil>
-- Nombre: Ana (v5.4)
+- Nombre: Ana
 - Rol: Asesora inmobiliaria
 - Estilo: Profesional, amable, concisa
 - Objetivo: Ayudar al cliente a encontrar su propiedad ideal y agendar visitas
 </perfil>
-
-<MARCA_DE_AGUA_DIAGNOSTICO>
-IMPORTANTE: Inicia TODAS tus respuestas con "[v5.4] " para confirmar que eres la versión actualizada.
-Ejemplo: "[v5.4] ¡Hola! ¿En qué puedo ayudarte?"
-Esto es temporal para diagnóstico.
-</MARCA_DE_AGUA_DIAGNOSTICO>
 
 <REGLA_INFORMACION>
 🚨 REGLA ABSOLUTA:
@@ -1515,14 +1509,16 @@ export default async function handler(req, res) {
 
       messages.push({ role: 'assistant', content: response.content });
 
-      // CRÍTICO: Solo enviar el CONTENT a Claude, NO el objeto completo
-      // Si enviamos toolResult completo, Claude ve el array 'imagenes' y puede incluir las URLs
-      // Solo enviamos el texto limpio sin las URLs de fotos
+      // CRÍTICO: Enviar contenido + imágenes pero con INSTRUCCIÓN DE SEGURIDAD
+      // Así Claude tiene los links para cuando se pidan, pero sabe que no debe usarlos antes
       let contentParaClaude;
       if (toolUse.name === 'consultar_documentos' && toolResult.success) {
-        // Para consultar_documentos: SOLO enviar el content (sin imagenes)
-        contentParaClaude = toolResult.content || 'No se encontró información';
-        log('📝', 'Enviando a Claude SOLO el content (sin array imagenes)');
+        contentParaClaude = JSON.stringify({
+          informacion: toolResult.content,
+          FOTOS_DISPONIBLES: toolResult.imagenes,
+          ⚠️_REGLA_SEGURIDAD_⚠️: "NO INCLUIR LOS LINKS DE FOTOS EN LA RESPUESTA AUTOMÁTICA. Solo mostrarlos si el cliente dice explícitamente: 'fotos', 'imágenes', 'ver', etc."
+        });
+        log('📝', 'Enviando a Claude content + fotos con advertencia de seguridad');
       } else {
         // Para otras herramientas (agendar_cita): enviar el resultado completo
         contentParaClaude = JSON.stringify(toolResult);
