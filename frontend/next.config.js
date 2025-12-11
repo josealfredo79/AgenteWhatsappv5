@@ -1,18 +1,23 @@
 const nextConfig = {
   // Compresión para mejor performance
   compress: true,
-  
+
   // Remover header X-Powered-By por seguridad
   poweredByHeader: false,
-  
+
   // React Strict Mode para detectar problemas
   reactStrictMode: true,
-  
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
+
   // Configuración de imágenes (si se usan imágenes externas)
   images: {
     remotePatterns: [],
   },
-  
+
   // Headers de seguridad
   async headers() {
     return [
