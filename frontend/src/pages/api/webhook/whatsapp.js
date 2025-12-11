@@ -141,7 +141,10 @@ async function obtenerEstadoConversacion(telefono) {
         propiedad_interes: estadoRow[9] || '',
         primer_contacto: estadoRow[10] || '',
         notas: estadoRow[11] || '',
-        email: estadoRow[15] || '', // Nueva columna P para Email
+        email: estadoRow[15] || '', // Columna P
+        // Nuevos campos de perfilado (Columnas Q, R)
+        perfil: estadoRow[16] || 'desconocido', // inversor | vivienda | desconocido
+        intencion: estadoRow[17] || '',         // vivir | rentar | revender
         // Nuevos campos de Lead Scoring
         score: parseInt(estadoRow[12] || '0', 10),
         calificacion: estadoRow[13] || 'COLD ❄️',
@@ -166,6 +169,8 @@ async function obtenerEstadoConversacion(telefono) {
       primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
       notas: '',
       email: '',
+      perfil: 'desconocido',
+      intencion: '',
       score: 0,
       calificacion: 'COLD ❄️',
       accion_sugerida: 'Perfilamiento inicial'
@@ -236,14 +241,16 @@ async function guardarEstadoConversacion(estado) {
       estado.score || 0,                                      // M: Puntaje numérico
       estado.calificacion || 'COLD ❄️',                       // N: Clasificación
       estado.accion_sugerida || 'Perfilamiento',              // O: Acción recomendada
-      estado.email || ''                                      // P: Email del cliente
+      estado.email || '',                                     // P: Email del cliente
+      estado.perfil || 'desconocido',                         // Q: Perfil (inversor/vivienda)
+      estado.intencion || ''                                  // R: Intención de uso
     ];
 
     if (rowIndex > -1) {
       log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Estados!A${rowIndex + 1}:P${rowIndex + 1}`,
+        range: `Estados!A${rowIndex + 1}:R${rowIndex + 1}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -251,7 +258,7 @@ async function guardarEstadoConversacion(estado) {
       log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Estados!A:P',
+        range: 'Estados!A:R',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -499,32 +506,74 @@ function detectarDatosEnMensaje(mensaje) {
     log('🏠', 'Detectado: cliente quiere cambiar tipo de propiedad');
   }
 
+  // DETECTAR PERFIL INVERSOR
+  const palabrasInversion = /\b(inversion|inversión|invertir|rentabilidad|roi|ganancia|negocio|plusvalia|plusvalía|revender|preventa|lote de inversion|macrolote|mayoreo)\b/i;
+  if (palabrasInversion.test(mensajeLower)) {
+    datos.perfil = 'inversor';
+    datos.intencion = 'negocio'; // Default para inversor, se puede refinar
+    if (/\b(rentar|rentas|flujo)\b/i.test(mensajeLower)) datos.intencion = 'rentar';
+    if (/\b(revender|venta futura|capitalizar)\b/i.test(mensajeLower)) datos.intencion = 'revender';
+    log('💰', 'Detectado: PERFIL INVERSOR');
+  }
+
+  // DETECTAR PERFIL VIVIENDA (VIDA PERSONAL)
+  const palabrasVivienda = /\b(vivir|mi casa|mi familia|hijos|escuela|trabajo|cerca de mi|mudarme|habitar|crédito|credito|infonavit|fovissste)\b/i;
+  if (palabrasVivienda.test(mensajeLower)) {
+    datos.perfil = 'vivienda';
+    datos.intencion = 'vivir';
+    log('🏠', 'Detectado: PERFIL VIVIENDA');
+  }
+
+  // DETECTAR MÉTODO DE PAGO (Clave para scoring)
+  if (/\b(contado|efectivo|transferencia|recursos propios|liquidez)\b/i.test(mensajeLower)) {
+    datos.metodo_pago = 'contado';
+    log('💵', 'Detectado: Pago de CONTADO');
+  } else if (/\b(credito|crédito|hipoteca|infonavit|banco|financiamiento)\b/i.test(mensajeLower)) {
+    datos.metodo_pago = 'credito';
+    log('🏦', 'Detectado: Pago con CRÉDITO');
+
+    if (/\b(aprobado|autorizado|ya tengo|listo)\b/i.test(mensajeLower)) {
+      datos.credito_status = 'aprobado';
+      log('✅', 'Detectado: Crédito APROBADO');
+    }
+  }
+
   return datos;
 }
 
 // ============================================================================
-// LEAD SCORING: SISTEMA DE CALIFICACIÓN
+// LEAD SCORING: SISTEMA DE CALIFICACIÓN (V2.0 - Perfilado)
 // ============================================================================
 function calcularLeadScore(estado) {
   let score = 0;
 
-  // 1. IDENTIDAD (+40 pts máx)
-  if (estado.nombre_cliente && estado.nombre_cliente.length > 2) score += 10;
-  if (estado.presupuesto) score += 20; // Dato crítico
-  if (estado.zona) score += 10;
-  if (estado.tipo_propiedad) score += 10;
+  // 1. IDENTIDAD BÁSICA (+30 pts máx)
+  if (estado.nombre_cliente && estado.nombre_cliente.length > 2) score += 5;
+  if (estado.presupuesto) score += 15;
+  if (estado.zona) score += 5;
+  if (estado.tipo_propiedad) score += 5;
 
-  // 2. COMPORTAMIENTO E INTENCIÓN
-  if (estado.etapa === 'interesado') score += 15; // Ya vio opciones y le gustó una
-  if (estado.etapa === 'esperando_fecha') score += 25; // Intención clara de visita
-  if (estado.etapa === 'agendar') score += 20; // Pidió agendar
-  if (estado.email) score += 15; // Email suma puntos de confianza
+  // 2. PERFIL E INTENCIÓN (+40 pts máx)
+  if (estado.perfil === 'inversor') {
+    score += 10; // Inversor suele ser más transaccional
+    if (estado.metodo_pago === 'contado') score += 20; // CASH IS KING
+    if (estado.intencion === 'negocio' || estado.intencion === 'revender') score += 5;
+  } else if (estado.perfil === 'vivienda') {
+    if (estado.credito_status === 'aprobado') score += 25; // Crédito listo es oro
+    else if (estado.metodo_pago === 'credito') score += 10;
+    if (estado.intencion === 'vivir') score += 5;
+  }
 
-  // 3. GAME CHANGER (Cita confirmada)
-  if (estado.etapa === 'cita_agendada') return 100; // Cliente CERRADO para visita
+  // 3. COMPORTAMIENTO (+30 pts máx)
+  if (estado.etapa === 'interesado') score += 10;
+  if (estado.etapa === 'esperando_fecha') score += 20;
+  if (estado.etapa === 'agendar') score += 15;
+  if (estado.email) score += 10;
 
-  // Cap para no exceder 95 sin cita
-  return Math.min(score, 95);
+  // 4. GAME CHANGERS (Cita confirmada)
+  if (estado.etapa === 'cita_agendada') return 100;
+
+  return Math.min(score, 99);
 }
 
 function obtenerClasificacion(score) {
@@ -684,7 +733,12 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     etapa: nuevaEtapa,
     // Agregar nombre y email si se detectaron
     nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || '',
-    email: datosNuevos.email || estadoActual.email || ''
+    email: datosNuevos.email || estadoActual.email || '',
+    // Actualizar perfil solo si se detectó uno nuevo, sino mantener el anterior
+    perfil: datosNuevos.perfil || estadoActual.perfil || 'desconocido',
+    intencion: datosNuevos.intencion || estadoActual.intencion || '',
+    metodo_pago: datosNuevos.metodo_pago || estadoActual.metodo_pago || '',
+    credito_status: datosNuevos.credito_status || estadoActual.credito_status || ''
   };
 
   log('📋', 'Estado actualizado', {
@@ -773,6 +827,35 @@ function construirSystemPrompt(estado) {
   const zona = estado.zona || null;
   const presupuesto = estado.presupuesto || null;
   const etapa = estado.etapa || 'inicial';
+  const perfil = estado.perfil || 'desconocido';
+
+  // INSTRUCCIONES DE TONO SEGÚN PERFIL
+  let tonoInstruccion = '';
+  if (perfil === 'inversor') {
+    tonoInstruccion = `
+<MODO_INVERSOR>
+Este cliente es un INVERSOR.
+- Tono: Analítico, profesional, directo, enfocado en ROI y plusvalía.
+- NO hables de "hogar para tu familia" o emociones cursis.
+- Habla de: Rentabilidad, crecimiento de zona, precios competitivos, oportunidad de negocio.
+- Si pregunta precios, destaca la oportunidad de inversión.
+</MODO_INVERSOR>`;
+  } else if (perfil === 'vivienda') {
+    tonoInstruccion = `
+<MODO_VIVIENDA>
+Este cliente busca VIVIENDA PERSONAL.
+- Tono: Empático, cálido, enfocado en bienestar, seguridad y familia.
+- Habla de: Comodidad, cercanía a servicios, tranquilidad, espacios para disfrutar.
+- Ayúdalo a visualizarse viviendo ahí.
+</MODO_VIVIENDA>`;
+  } else {
+    tonoInstruccion = `
+<MODO_GENERAL>
+Aún no sabemos si es inversor o busca vivienda.
+- Mantén un tono profesional pero amable.
+- Trata de inferir su perfil con tus preguntas sutilmente.
+</MODO_GENERAL>`;
+  }
 
   const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
   const fechaHoy = ahora.toFormat("EEEE d 'de' MMMM 'de' yyyy", { locale: 'es' });
@@ -912,6 +995,10 @@ Tu objetivo:
    2. Si la zona aparece en el documento → muestra esas propiedades
    3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
 
+   3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
+
+###############################################################
+${tonoInstruccion}
 ###############################################################
 
 Eres Ana, asesora inmobiliaria profesional.
@@ -938,6 +1025,7 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 - Zona de interés: ${zona || '❌ Pendiente'}
 - Presupuesto: ${presupuesto || '❌ Pendiente'}
 - Etapa actual: ${etapa}
+- Perfil detectado: ${perfil.toUpperCase()}
 </datos_del_cliente>
 
 ${instruccionEspecifica}
