@@ -1161,26 +1161,8 @@ function extraerImagenesDeTexto(texto) {
 }
 
 // ============================================================================
-// ENVIAR MENSAJE CON IMAGEN POR WHATSAPP
-// ============================================================================
-async function enviarMensajeConImagen(client, from, to, body, mediaUrl) {
-  try {
-    log('🖼️', `Enviando imagen: ${mediaUrl.substring(0, 50)}...`);
+// Función enviarMensajeConImagen eliminada para garantizar que no se envíen fotos como media messages
 
-    const mensaje = await client.messages.create({
-      from: from,
-      to: to,
-      body: body || '',
-      mediaUrl: [mediaUrl]
-    });
-
-    log('✅', `Imagen enviada exitosamente. SID: ${mensaje.sid}`);
-    return { success: true, sid: mensaje.sid };
-  } catch (error) {
-    log('❌', `Error enviando imagen: ${error.message}`);
-    return { success: false, error: error.message };
-  }
-}
 
 // ============================================================================
 // EJECUTAR HERRAMIENTA: AGENDAR CITA
@@ -1528,7 +1510,7 @@ export default async function handler(req, res) {
       // Si enviamos toolResult completo, Claude ve el array 'imagenes' y puede incluir las URLs
       // Solo enviamos el texto limpio sin las URLs de fotos
       let contentParaClaude;
-      if (toolUse.name === 'consultar_documentos' \u0026\u0026 toolResult.success) {
+      if (toolUse.name === 'consultar_documentos' && toolResult.success) {
         // Para consultar_documentos: SOLO enviar el content (sin imagenes)
         contentParaClaude = toolResult.content || 'No se encontró información';
         log('📝', 'Enviando a Claude SOLO el content (sin array imagenes)');
@@ -1603,16 +1585,10 @@ export default async function handler(req, res) {
       body: respuestaTexto
     });
 
-    // 12.5 Enviar imágenes si hay
-    // DESHABILITADO: Ya no enviamos imágenes como media messages.
-    // Los links deben ir en el texto si el cliente los pide.
-    log('🖼️', `=== ENVÍO DE IMÁGENES DESHABILITADO ===`);
+    // 12.5 Enviar imágenes: COMPLETAMENTE ELIMINADO
+    // El agente solo proporciona links en texto cuando se piden
+    log('🖼️', `=== SISTEMA DE FOTOS AUTOMÁTICAS: DESACTIVADO ===`);
 
-    /* CÓDIGO DE IMÁGENES COMPLETAMENTE DESHABILITADO
-    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
-      // ... código comentado ...
-    }
-    */
 
     // 13. Guardar respuesta en historial
     await guardarMensajeEnSheet({
