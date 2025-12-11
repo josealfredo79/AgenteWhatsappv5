@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-frontend",
-  "version": "5.4.1",
+  "version": "5.4.2",
   "private": true,
   "engines": {
     "node": ">=18.0.0"
