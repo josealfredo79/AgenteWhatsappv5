@@ -3,6 +3,8 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
+const cron = require('node-cron');
+const fetch = global.fetch; // Asegurar fetch disponible (Node 18+)
 
 console.log('🚀 Iniciando servidor...');
 console.log('📍 NODE_ENV:', process.env.NODE_ENV);
@@ -79,6 +81,32 @@ app.prepare().then(() => {
       throw err;
     }
     console.log(`✅ Servidor Next.js + Socket.io + MCP listo en http://${HOST}:${PORT}`);
+
+    // ========================================================================
+    // CRON JOBS AUTOMATIZADOS (Self-Healing Cron)
+    // ========================================================================
+    // Ejecutar todos los días a las 10:00 AM hora CDMX (16:00 UTC)
+    console.log('⏰ Inicializando Cron Jobs...');
+    cron.schedule('0 16 * * *', async () => {
+      console.log('🔔 CRON AUTO-TRIGGER: Iniciando campaña de seguimiento diaria...');
+      try {
+        // Hacemos una llamada LOCAL al endpoint de la API
+        // Esto asegura que se ejecute en el contexto correcto de Next.js
+        const apiUrl = `http://127.0.0.1:${PORT}/api/cron/followup_scheduler`;
+        console.log(`▶️ Llamando a: ${apiUrl}`);
+
+        const response = await fetch(apiUrl, { method: 'POST' });
+        const result = await response.json();
+
+        console.log('✅ Cron ejecutado exitosamente:', JSON.stringify(result));
+      } catch (err) {
+        console.error('❌ Error fatal en Cron Job:', err.message);
+      }
+    }, {
+      scheduled: true,
+      timezone: "UTC" // Usamos UTC para evitar problemas de zona horaria del servidor
+    });
+    console.log('✅ Cron Job programado: 16:00 UTC (10:00 AM CDMX)');
   });
 }).catch((err) => {
   console.error('❌ Error al preparar Next.js:', err);

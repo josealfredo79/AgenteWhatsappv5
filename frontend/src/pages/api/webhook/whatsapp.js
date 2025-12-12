@@ -105,7 +105,7 @@ async function obtenerEstadoConversacion(telefono) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Estados!A:L'  // Ampliado para más campos de seguimiento
+      range: 'Estados!A:S'  // Ampliado A-Z para incluir Perfil, Intención y Seguimiento
     });
 
     const rows = response.data.values || [];
@@ -145,6 +145,7 @@ async function obtenerEstadoConversacion(telefono) {
         // Nuevos campos de perfilado (Columnas Q, R)
         perfil: estadoRow[16] || 'desconocido', // inversor | vivienda | desconocido
         intencion: estadoRow[17] || '',         // vivir | rentar | revender
+        nivel_seguimiento: parseInt(estadoRow[18] || '0', 10), // Columna S: 0=Nada, 1=Guía, 2=Reactivación
         // Nuevos campos de Lead Scoring
         score: parseInt(estadoRow[12] || '0', 10),
         calificacion: estadoRow[13] || 'COLD ❄️',
@@ -171,6 +172,7 @@ async function obtenerEstadoConversacion(telefono) {
       email: '',
       perfil: 'desconocido',
       intencion: '',
+      nivel_seguimiento: 0,
       score: 0,
       calificacion: 'COLD ❄️',
       accion_sugerida: 'Perfilamiento inicial'
@@ -243,14 +245,15 @@ async function guardarEstadoConversacion(estado) {
       estado.accion_sugerida || 'Perfilamiento',              // O: Acción recomendada
       estado.email || '',                                     // P: Email del cliente
       estado.perfil || 'desconocido',                         // Q: Perfil (inversor/vivienda)
-      estado.intencion || ''                                  // R: Intención de uso
+      estado.intencion || '',                                 // R: Intención de uso
+      estado.nivel_seguimiento || 0                           // S: Nivel de seguimiento (Drip)
     ];
 
     if (rowIndex > -1) {
       log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Estados!A${rowIndex + 1}:R${rowIndex + 1}`,
+        range: `Estados!A${rowIndex + 1}:S${rowIndex + 1}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -258,7 +261,7 @@ async function guardarEstadoConversacion(estado) {
       log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Estados!A:R',
+        range: 'Estados!A:S',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -738,7 +741,8 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     perfil: datosNuevos.perfil || estadoActual.perfil || 'desconocido',
     intencion: datosNuevos.intencion || estadoActual.intencion || '',
     metodo_pago: datosNuevos.metodo_pago || estadoActual.metodo_pago || '',
-    credito_status: datosNuevos.credito_status || estadoActual.credito_status || ''
+    credito_status: datosNuevos.credito_status || estadoActual.credito_status || '',
+    nivel_seguimiento: estadoActual.nivel_seguimiento || 0 // Mantener nivel actual
   };
 
   log('📋', 'Estado actualizado', {
