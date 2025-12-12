@@ -415,8 +415,23 @@ function detectarDatosEnMensaje(mensaje) {
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
-    datos.zona = zonaDetectada;
-    log('📍', `Zona detectada del mensaje: ${zonaDetectada}`);
+
+    // FIX: Evitar detectar "Google Maps" o palabras de ubicación como zona
+    const terminosIgnorados = ['Google Maps', 'Maps', 'Ubicacion', 'Ubicación', 'Donde', 'Mapa', 'Direccion', 'Dirección'];
+    const esTerminoIgnorado = terminosIgnorados.some(t => zonaDetectada.includes(t) || zonaDetectada.toLowerCase().includes('google'));
+
+    if (!esTerminoIgnorado) {
+      datos.zona = zonaDetectada;
+      log('📍', `Zona detectada del mensaje: ${zonaDetectada}`);
+    } else {
+      log('⚠️', `Zona ignorada por ser término de ubicación: ${zonaDetectada}`);
+    }
+  }
+
+  // DETECTAR SOLICITUD DE UBICACIÓN
+  if (/\b(ubicacion|mapa|google maps|donde es|donde esta|coordenadas|geo|llegar)\b/i.test(mensajeLower)) {
+    datos.pide_ubicacion = true;
+    log('🗺️', 'Detectado: Solicitud de ubicación/mapa');
   }
 
   // PRESUPUESTO
@@ -871,6 +886,21 @@ Aún no sabemos si es inversor o busca vivienda.
   if (!zona) datosFaltantes.push('zona');
   if (!presupuesto) datosFaltantes.push('presupuesto');
 
+  // Instrucción especial para Ubicación
+  let instruccionUbicacion = '';
+  // Si NO estamos en etapa inicial y piden ubicación, forzar a darla si se tiene contexto
+  // Esta lógica se insertará dinámicamente si el último mensaje (que no tenemos aquí parseado como intent, pero Claude lo verá) pide maps.
+  // Pero podemos agregar una regla general:
+
+  instruccionUbicacion = `
+  <MANEJO_UBICACION>
+  Si el cliente pide "ubicación", "mapa" o "google maps":
+  1. Si ya estás hablando de una propiedad específica: Proporciona la ubicación aproximada o calles cercanas.
+  2. Si NO hay propiedad seleccionada: Pregunta "¿De qué zona o propiedad te gustaría conocer la ubicación?"
+  3. NUNCA digas "No tenemos propiedades en Google Maps".
+  </MANEJO_UBICACION>
+  `;
+
   // Determinar la siguiente acción según el estado
   let instruccionEspecifica = '';
 
@@ -999,10 +1029,9 @@ Tu objetivo:
    2. Si la zona aparece en el documento → muestra esas propiedades
    3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
 
-   3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
-
 ###############################################################
 ${tonoInstruccion}
+${instruccionUbicacion}
 ###############################################################
 
 Eres Ana, asesora inmobiliaria profesional.
