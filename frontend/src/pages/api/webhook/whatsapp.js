@@ -1191,7 +1191,8 @@ const tools = [
         resumen: { type: 'string', description: 'Título de la cita, ej: Visita a propiedad' },
         fecha: { type: 'string', description: 'Fecha que el CLIENTE proporcionó. Formato: YYYY-MM-DD. NO inventes fechas.' },
         hora_inicio: { type: 'string', description: 'Hora que el CLIENTE proporcionó. Formato: HH:MM (24hrs)' },
-        duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' }
+        duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' },
+        email_cliente: { type: 'string', description: 'Email del cliente para enviarle la invitación. OBLIGATORIO si ya se tiene.' }
       },
       required: ['resumen', 'fecha', 'hora_inicio']
     }
@@ -1435,9 +1436,9 @@ async function consultarDisponibilidad({ fecha }) {
 // ============================================================================
 // EJECUTAR HERRAMIENTA: AGENDAR CITA
 // ============================================================================
-async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 }) {
+async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60, email_cliente }) {
   log('📅', '=== INICIANDO AGENDAR CITA ===');
-  log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos });
+  log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos, email_cliente });
 
   try {
     log('🔑', 'Obteniendo autenticación de Google...');
@@ -1482,8 +1483,15 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 
       start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE },
       // Agregar descripción para identificar el evento
-      description: `Cita agendada automáticamente por el Agente WhatsApp.\nFecha de creación: ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss')}`
+      description: `Cita agendada automáticamente por el Agente WhatsApp.\nCliente: ${email_cliente || 'No especificado'}\nFecha de creación: ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss')}`
     };
+
+    // Agregar asistente si hay email
+    if (email_cliente && email_cliente.includes('@')) {
+      eventData.attendees = [{ email: email_cliente.trim() }];
+      log('📧', `Agregando invitacion para: ${email_cliente}`);
+    }
+
     log('📅', 'Evento a crear:', eventData);
 
     log('📅', 'Insertando evento en Google Calendar...');
