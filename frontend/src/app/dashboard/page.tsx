@@ -29,6 +29,11 @@ interface Conversation {
   ultimoMensaje: string;
   timestamp: number;
   unread?: number;
+  score?: number;
+  calificacion?: string;
+  perfil?: string;
+  etapa?: string;
+  accion_sugerida?: string;
 }
 
 export default function Dashboard() {
@@ -193,10 +198,10 @@ export default function Dashboard() {
   const handleSend = async () => {
     if (!input.trim() || !selected || sending) return;
     const destinatario = conversations.find((c) => c.id === selected)?.usuario || "";
-    
+
     console.log('📤 [DASHBOARD] Enviando mensaje a:', destinatario);
     setSending(true);
-    
+
     const msg: Message = {
       messageId: `msg-${Date.now()}`,
       conversationId: selected,
@@ -213,7 +218,7 @@ export default function Dashboard() {
 
     try {
       console.log('📤 [DASHBOARD] Llamando a /api/send-message con:', { to: msg.to, body: msg.body });
-      
+
       const response = await fetch("/api/send-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -222,10 +227,10 @@ export default function Dashboard() {
           body: msg.body,
         }),
       });
-      
+
       const result = await response.json();
       console.log('📤 [DASHBOARD] Respuesta del servidor:', result);
-      
+
       if (response.ok) {
         setMessages((prev) =>
           prev.map((m) => (m.timestamp === msg.timestamp ? { ...m, status: 'delivered' } : m))
@@ -267,6 +272,18 @@ export default function Dashboard() {
     if (isToday) return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     if (isYesterday) return 'Ayer';
     return date.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' });
+  };
+
+  const getScoreColor = (score: number = 0) => {
+    if (score >= 80) return '#FF3D00'; // Hot - Rojo Naranja Intenso
+    if (score >= 50) return '#FFD600'; // Warm - Amarillo
+    return '#455A64'; // Cold - Gris Azulado
+  };
+
+  const getProfileIcon = (perfil: string = 'desconocido') => {
+    if (perfil?.toLowerCase() === 'inversor') return '💰';
+    if (perfil?.toLowerCase() === 'vivienda') return '🏠';
+    return '';
   };
 
   if (!auth) {
@@ -745,6 +762,38 @@ export default function Dashboard() {
                       <div style={{ color: "#8696A0", fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {c.ultimoMensaje}
                       </div>
+
+                      {/* LEAD SCORING BADGES */}
+                      <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+                        {c.calificacion && c.calificacion !== 'COLD ❄️' && (
+                          <div style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: '#fff',
+                            background: getScoreColor(c.score),
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                            cursor: 'help'
+                          }} title={c.accion_sugerida}>
+                            {c.calificacion.split(' ')[0]}
+                          </div>
+                        )}
+                        {c.perfil && c.perfil !== 'desconocido' && (
+                          <div style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#111B21',
+                            background: '#E9EDEF',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                            border: '1px solid #D1D7DB'
+                          }}>
+                            {getProfileIcon(c.perfil)} {c.perfil.charAt(0).toUpperCase() + c.perfil.slice(1)}
+                          </div>
+                        )}
+                      </div>
                       {c.unread && c.unread > 0 && (
                         <div style={{ background: "#25D366", color: "#111B21", borderRadius: "50%", minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, padding: "0 6px" }}>
                           {c.unread}
@@ -850,8 +899,8 @@ export default function Dashboard() {
                     >
                       <div
                         style={{
-                          background: m.from === "Agente" 
-                            ? (m.status === 'failed' ? "#5c2b2b" : "#005C4B") 
+                          background: m.from === "Agente"
+                            ? (m.status === 'failed' ? "#5c2b2b" : "#005C4B")
                             : "#202C33",
                           borderRadius: 8,
                           padding: "8px 12px",
@@ -888,7 +937,7 @@ export default function Dashboard() {
                               )}
                               {m.status === 'failed' && (
                                 <svg width="16" height="16" fill="#ff6b6b" viewBox="0 0 24 24" title="Error al enviar">
-                                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                                 </svg>
                               )}
                             </>
@@ -949,8 +998,8 @@ export default function Dashboard() {
                 >
                   {sending ? (
                     <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" opacity=".3"/>
-                      <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z"/>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" opacity=".3" />
+                      <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
                     </svg>
                   ) : (
                     <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
@@ -1003,9 +1052,9 @@ export default function Dashboard() {
               boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               animation: 'slideIn 0.3s ease-out',
               maxWidth: 350,
-              background: toast.type === 'success' 
-                ? 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)' 
-                : toast.type === 'error' 
+              background: toast.type === 'success'
+                ? 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)'
+                : toast.type === 'error'
                   ? 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)'
                   : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
             }}

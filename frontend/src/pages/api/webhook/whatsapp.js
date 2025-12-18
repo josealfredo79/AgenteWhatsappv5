@@ -1049,7 +1049,9 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 1. SIEMPRE usa "consultar_documentos" ANTES de hablar de propiedades
 2. Si el resultado dice "zona no encontrada" o la zona no aparece → di que no tienes disponibilidad
 3. SOLO menciona lo que EXISTE en el documento
-4. Si inventas información, el cliente recibirá datos falsos - esto es INACEPTABLE
+4. ANTES DE AGENDAR: Usa "consultar_disponibilidad" para verificar que el horario esté libre.
+5. Si el horario está ocupado, ofrece alternativas cercanas.
+6. Si inventas información, el cliente recibirá datos falsos - esto es INACEPTABLE
 </REGLA_INFORMACION>
 
 <datos_del_cliente>
@@ -1180,7 +1182,7 @@ const tools = [
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda una visita a una propiedad. IMPORTANTE: Solo usar cuando el cliente YA HAYA PROPORCIONADO una fecha y hora específicas. Si el cliente dice "sí quiero agendar" pero NO ha dado fecha, NO uses esta herramienta - primero pregúntale qué día y hora le conviene.',
+    description: 'Agenda una visita a una propiedad. IMPORTANTE: Solo usar cuando el cliente YA HAYA PROPORCIONADO una fecha y hora específicas Y hayas verificado la disponibilidad. Si el cliente dice "sí quiero agendar" pero NO ha dado fecha, NO uses esta herramienta - primero pregúntale qué día y hora le conviene.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1190,6 +1192,17 @@ const tools = [
         duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' }
       },
       required: ['resumen', 'fecha', 'hora_inicio']
+    }
+  },
+  {
+    name: 'consultar_disponibilidad',
+    description: 'Consulta los horarios OCUPADOS en el calendario para una fecha específica. USAR SIEMPRE antes de agendar una cita o cuando el cliente pregunte qué horarios tienes disponibles.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fecha: { type: 'string', description: 'Fecha a consultar. Formato: YYYY-MM-DD. Si es "hoy", usa la fecha actual.' }
+      },
+      required: ['fecha']
     }
   }
 ];
@@ -1348,8 +1361,73 @@ function extraerImagenesDeTexto(texto) {
   return imagenes;
 }
 
+// Función enviarMensajeConImagen eliminada
+
 // ============================================================================
-// Función enviarMensajeConImagen eliminada para garantizar que no se envíen fotos como media messages
+// EJECUTAR HERRAMIENTA: CONSULTAR DISPONIBILIDAD
+// ============================================================================
+async function consultarDisponibilidad({ fecha }) {
+  log('📅', '=== CONSULTANDO DISPONIBILIDAD ===', { fecha });
+
+  try {
+    const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar.readonly']);
+    const calendar = google.calendar({ version: 'v3', auth });
+    const calendarId = process.env.GOOGLE_CALENDAR_ID;
+
+    if (!calendarId) {
+      return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
+    }
+
+    // Definir inicio y fin del día en la zona horaria correcta
+    const [year, month, day] = fecha.split('-').map(Number);
+    const timeMin = DateTime.fromObject({ year, month, day, hour: 0, minute: 0, second: 0 }, { zone: CONFIG.TIMEZONE }).toISO();
+    const timeMax = DateTime.fromObject({ year, month, day, hour: 23, minute: 59, second: 59 }, { zone: CONFIG.TIMEZONE }).toISO();
+
+    log('📅', `Consultando rango: ${timeMin} a ${timeMax}`);
+
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin,
+      timeMax,
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+
+    const eventos = response.data.items || [];
+
+    if (eventos.length === 0) {
+      log('✅', 'No hay eventos, día totalmente libre');
+      return {
+        success: true,
+        mensaje: `El día ${fecha} está totalmente libre. Horario de atención: 9:00 a 18:00.`,
+        disponible: true,
+        eventos: []
+      };
+    }
+
+    // Formatear lista de ocupados para Claude
+    let ocupados = eventos.map(evento => {
+      if (!evento.start.dateTime) return null; // Ignorar eventos de todo el día por ahora si no bloquean hora exacta
+
+      const inicio = DateTime.fromISO(evento.start.dateTime).setZone(CONFIG.TIMEZONE).toFormat('HH:mm');
+      const fin = DateTime.fromISO(evento.end.dateTime).setZone(CONFIG.TIMEZONE).toFormat('HH:mm');
+      return `- OCUPADO de ${inicio} a ${fin}`;
+    }).filter(Boolean).join('\n');
+
+    log('⚠️', `Encontrados ${eventos.length} eventos`);
+
+    return {
+      success: true,
+      mensaje: `Horarios ocupados para el ${fecha}:\n${ocupados}\n\nINSTRUCCIÓN PARA EL AGENTE: Ofrece horarios que NO se traslapen con estos.`,
+      disponible: true,
+      ocupados_texto: ocupados
+    };
+
+  } catch (error) {
+    log('❌', 'Error al consultar disponibilidad', error);
+    return { success: false, error: error.message };
+  }
+}
 
 
 // ============================================================================
@@ -1681,6 +1759,8 @@ export default async function handler(req, res) {
           log('🖼️', `Imágenes a enviar: ${imagenesParaEnviar.length}`);
         }
         */
+      } else if (toolUse.name === 'consultar_disponibilidad') {
+        toolResult = await consultarDisponibilidad(toolUse.input);
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
         // Guardar info de la cita para actualizar estado después
