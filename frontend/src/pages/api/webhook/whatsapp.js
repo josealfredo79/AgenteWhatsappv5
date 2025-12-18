@@ -932,16 +932,18 @@ Pregunta cuál le interesa.
   } else if (etapa === 'interesado') {
     instruccionEspecifica = `
 <accion_requerida>
-El cliente ya mostró interés en una propiedad específica.
+El cliente ya mostró interés en una propiedad específica tras ver las opciones.
 
-📸 SI PIDE FOTOS/IMÁGENES:
-→ USA "consultar_documentos" OBLIGATORIAMENTE con tipo="${tipo}", zona="${zona}", presupuesto="${presupuesto}"
-→ Di: "¡Claro! Aquí tienes las fotos:"
-→ INCLUYE LOS LINKS DE LAS FOTOS EN TU RESPUESTA DE TEXTO.
-→ NO digas que las envías por separado.
+📍 OBJETIVO CRÍTICO: CONSEGUIR EL EMAIL
+Si NO tenemos el email del cliente (${estado.email ? 'YA LO TENEMOS: ' + estado.email : 'AÚN NO LO TENEMOS'}):
 
-Si pregunta más detalles → dáselos brevemente.
-Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
+1. Di: "¡Excelente elección! 🏠 Esa propiedad es una gran oportunidad. Para enviarte la ficha técnica completa con ubicación exacta, fotos en alta calidad y planes de financiamiento, ¿a qué correo te la envío?"
+2. NO intentes agendar cita todavía. PRIMERO asegura el contacto.
+
+Si YA tenemos el email:
+1. Pregunta si tiene alguna duda específica.
+2. Invita a verlo: "¿Te gustaría agendar una visita para conocerlo en persona? 📅"
+
 NO vuelvas a listar todas las opciones.
 </accion_requerida>`;
   } else if (etapa === 'agendar') {
