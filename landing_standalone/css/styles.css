@@ -411,6 +411,12 @@ h3 {
     gap: 10px;
 }
 
+.sandbox-info {
+    font-size: 0.9rem;
+    color: #ffcc00;
+    margin-top: 10px;
+}
+
 /* --- CONTACT SECTION --- */
 .contact-section {
     padding: 6rem 20px;
