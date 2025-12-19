@@ -1,7 +1,8 @@
 :root {
     --bg-color: #050505;
     --text-color: #ffffff;
-    --primary: #25D366; /* WhatsApp Greenish */
+    --primary: #25D366;
+    /* WhatsApp Greenish */
     --accent: #00E5FF;
     --glass-bg: rgba(255, 255, 255, 0.05);
     --glass-border: rgba(255, 255, 255, 0.1);
@@ -33,7 +34,9 @@ body {
 }
 
 /* Typography & Utilities */
-h1, h2, h3 {
+h1,
+h2,
+h3 {
     font-family: var(--font-heading);
 }
 
@@ -181,7 +184,7 @@ h1, h2, h3 {
     display: flex;
     justify-content: space-around;
     margin-top: 3rem;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding-top: 2rem;
 }
 
@@ -253,18 +256,19 @@ h1, h2, h3 {
     .hero h1 {
         font-size: 2.5rem;
     }
-    
+
     .navbar {
         width: 100%;
         top: 0;
         border-radius: 0;
         padding: 1rem;
     }
-    
+
     .nav-links {
-        display: none; /* Simplificado para mobile */
+        display: none;
+        /* Simplificado para mobile */
     }
-    
+
     .stats {
         flex-direction: column;
         gap: 1.5rem;
@@ -272,6 +276,244 @@ h1, h2, h3 {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- DEMO SECTION --- */
+.demo-section {
+    padding: 6rem 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.demo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4rem;
+    padding: 3rem;
+    flex-wrap: wrap;
+}
+
+/* Phone Mockup */
+.phone-mockup {
+    width: 300px;
+    height: 580px;
+    background: #000;
+    border-radius: 40px;
+    border: 8px solid #333;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.phone-header {
+    background: #075E54;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.phone-header .avatar {
+    width: 40px;
+    height: 40px;
+    background: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.phone-header .contact-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.phone-header .name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.phone-header .status {
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.chat-screen {
+    background-color: rgba(13, 20, 24, 0.9);
+    /* WhatsApp Dark Mode Bg with opacity */
+    height: calc(100% - 70px);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    /* WA Doodle */
+    background-blend-mode: overlay;
+}
+
+.message {
+    max-width: 80%;
+    padding: 10px 15px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    position: relative;
+}
+
+.message.received {
+    background: #202c33;
+    color: #fff;
+    align-self: flex-start;
+    border-top-left-radius: 0;
+}
+
+.message.sent {
+    background: #005c4b;
+    color: #fff;
+    align-self: flex-end;
+    border-top-right-radius: 0;
+}
+
+.demo-text {
+    flex: 1;
+    min-width: 300px;
+}
+
+.demo-text h3 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+    color: var(--accent);
+}
+
+.demo-text ul {
+    list-style: none;
+    margin-bottom: 2rem;
+}
+
+.demo-text li {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* --- CONTACT SECTION --- */
+.contact-section {
+    padding: 6rem 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.contact-card {
+    text-align: center;
+    max-width: 600px;
+    width: 100%;
+    border: 1px solid var(--primary);
+    box-shadow: 0 0 30px rgba(37, 211, 102, 0.1);
+}
+
+.contact-card h2 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.price-tag {
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 2rem 0;
+}
+
+.price-tag .currency {
+    font-size: 2rem;
+    vertical-align: super;
+}
+
+.price-tag .period {
+    font-size: 1rem;
+    color: #888;
+    font-weight: 400;
+}
+
+.large-btn {
+    font-size: 1.2rem;
+    padding: 15px 40px;
+    width: 100%;
+    max-width: 300px;
+}
+
+.discount-text {
+    color: #25D366;
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+}
+
+.guarantee {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: #888;
+}
+
+/* --- FLOATING WHATSAPP BUTTON --- */
+.floating-wa {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background: #25D366;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    transition: transform 0.3s;
+}
+
+.floating-wa:hover {
+    transform: scale(1.1);
+}
+
+.whatsapp-icon {
+    width: 35px;
+    height: 35px;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+    .demo-container {
+        flex-direction: column;
+        padding: 1.5rem;
+        gap: 2rem;
+    }
+
+    .phone-mockup {
+        width: 100%;
+        max-width: 300px;
+        height: 500px;
+    }
+
+    .demo-text {
+        text-align: center;
+    }
+
+    .demo-text ul {
+        text-align: left;
+        display: inline-block;
+    }
 }

@@ -1497,7 +1497,8 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
     log('📅', 'Insertando evento en Google Calendar...');
     const result = await calendar.events.insert({
       calendarId,
-      requestBody: eventData
+      requestBody: eventData,
+      sendUpdates: 'all'
     });
 
     log('✅', '=== CITA AGENDADA EXITOSAMENTE ===');

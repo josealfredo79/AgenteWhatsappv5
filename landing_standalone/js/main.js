@@ -87,3 +87,47 @@ function animate() {
 }
 
 animate();
+
+// --- CHAT SIMULATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    const messages = document.querySelectorAll('.message');
+    const chatScreen = document.querySelector('.chat-screen');
+
+    // Ocultar mensajes inicialmente
+    messages.forEach(msg => {
+        msg.style.opacity = '0';
+        msg.style.transform = 'translateY(20px)';
+        msg.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    });
+
+    const showMessages = async () => {
+        for (let i = 0; i < messages.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Espera entre mensajes
+
+            messages[i].style.opacity = '1';
+            messages[i].style.transform = 'translateY(0)';
+
+            // Auto scroll al fondo
+            chatScreen.scrollTop = chatScreen.scrollHeight;
+
+            // Sonido opcional de mensaje (pop)
+            // const audio = new Audio('assets/pop.mp3');
+            // audio.play().catch(e => {}); 
+        }
+    };
+
+    // Iniciar animación cuando la sección sea visible
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                showMessages();
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.5 });
+
+    const demoSection = document.querySelector('#demo');
+    if (demoSection) {
+        observer.observe(demoSection);
+    }
+});
