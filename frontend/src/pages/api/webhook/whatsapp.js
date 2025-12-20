@@ -1519,6 +1519,50 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
       log('⚠️', `No se pudo verificar el evento: ${verifyError.message}`);
     }
 
+    // ========================================================================
+    // NOTIFICACIÓN AL DUEÑO POR WHATSAPP
+    // ========================================================================
+    const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER;
+    if (ownerNumber) {
+      try {
+        log('📲', '=== ENVIANDO NOTIFICACIÓN AL DUEÑO ===');
+
+        const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        const twilioWhatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+        // Formatear el número del dueño correctamente
+        let ownerWhatsapp = ownerNumber.replace(/\D/g, ''); // Solo dígitos
+        if (!ownerWhatsapp.startsWith('52')) {
+          ownerWhatsapp = '52' + ownerWhatsapp; // Agregar código de México si no lo tiene
+        }
+        ownerWhatsapp = 'whatsapp:+' + ownerWhatsapp;
+
+        const notificacion = `🔔 *NUEVA CITA AGENDADA*
+
+📅 *Fecha:* ${inicio.toFormat("EEEE d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}
+👤 *Cliente:* ${email_cliente || 'No proporcionó email'}
+🏠 *Visita:* ${resumen}
+⏱️ *Duración:* ${duracion_minutos} minutos
+
+📌 Ver en calendario: ${result.data.htmlLink}
+
+_Notificación automática del Agente WhatsApp_`;
+
+        await twilioClient.messages.create({
+          from: 'whatsapp:' + twilioWhatsappNumber,
+          to: ownerWhatsapp,
+          body: notificacion
+        });
+
+        log('✅', `Notificación enviada al dueño: ${ownerWhatsapp}`);
+      } catch (notifError) {
+        // No fallar la cita si la notificación falla
+        log('⚠️', `Error enviando notificación al dueño: ${notifError.message}`);
+      }
+    } else {
+      log('ℹ️', 'OWNER_WHATSAPP_NUMBER no configurado, no se envía notificación');
+    }
+
     return {
       success: true,
       mensaje: `Cita agendada exitosamente para el ${inicio.toFormat("d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}`,

@@ -18,6 +18,10 @@ GOOGLE_DOCS_ID=1CWRkJNcsScJOK-NMxtxnUdpuxrYcqaru5qiu9rHzbbw
 # === GENERAL ===
 NODE_ENV=production
 
+# === NOTIFICACIONES AL DUEÑO ===
+# Número de WhatsApp para recibir avisos cuando se agende una cita
+OWNER_WHATSAPP_NUMBER=9531953182
+
 # === DASHBOARD (OPCIONAL) ===
 NEXT_PUBLIC_DASHBOARD_USER=admin
 NEXT_PUBLIC_DASHBOARD_PASS=admin123
