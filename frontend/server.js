@@ -107,6 +107,28 @@ app.prepare().then(() => {
       timezone: "UTC" // Usamos UTC para evitar problemas de zona horaria del servidor
     });
     console.log('✅ Cron Job programado: 16:00 UTC (10:00 AM CDMX)');
+
+    // ========================================================================
+    // CRON: TIPS EDUCATIVOS SEMANALES (Cada lunes a las 9:00 AM CDMX = 15:00 UTC)
+    // ========================================================================
+    cron.schedule('0 15 * * 1', async () => {
+      console.log('🎓 CRON AUTO-TRIGGER: Iniciando envío de Tips Educativos semanales...');
+      try {
+        const apiUrl = `http://127.0.0.1:${PORT}/api/cron/educational_tips`;
+        console.log(`▶️ Llamando a: ${apiUrl}`);
+
+        const response = await fetch(apiUrl, { method: 'POST' });
+        const result = await response.json();
+
+        console.log('✅ Tips educativos enviados:', JSON.stringify(result));
+      } catch (err) {
+        console.error('❌ Error en Cron de Tips Educativos:', err.message);
+      }
+    }, {
+      scheduled: true,
+      timezone: "UTC"
+    });
+    console.log('✅ Cron Job programado: Tips Educativos - Lunes 15:00 UTC (9:00 AM CDMX)');
   });
 }).catch((err) => {
   console.error('❌ Error al preparar Next.js:', err);
