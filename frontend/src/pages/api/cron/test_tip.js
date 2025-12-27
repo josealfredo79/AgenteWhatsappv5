@@ -6,43 +6,68 @@
 import twilio from 'twilio';
 
 export default async function handler(req, res) {
-    console.log('🧪 Enviando tip de prueba...');
+    console.log('🧪 Enviando tip de prueba (DEBUG MODE)...');
 
     try {
-        const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+        const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER;
+
+        // Debug de variables (sin revelar secretos completos)
+        console.log('🔧 Configuración:');
+        console.log('- SID:', accountSid ? '***' + accountSid.slice(-4) : 'FALTA');
+        console.log('- Token:', authToken ? '***' + authToken.slice(-4) : 'FALTA');
+        console.log('- From:', fromNumber);
+        console.log('- Owner:', ownerNumber);
+
+        if (!accountSid || !authToken || !fromNumber) {
+            throw new Error("Faltan credenciales de Twilio en variables de entorno");
+        }
+
+        const client = twilio(accountSid, authToken);
 
         const tipPrueba = `Hola! 👋
 
-📈 *Plusvalía en Zonas de Desarrollo*
+🧪 *PRUEBA DE CONEXIÓN*
 
-¿Sabías que las propiedades en zonas de desarrollo aumentan entre 8-15% de valor anual? 📈
+Si ves este mensaje, el sistema de Tips Educativos está funcionando correctamente.
 
-Las zonas en crecimiento son las mejores oportunidades de inversión.
-
-¿Te gustaría conocer las zonas con mayor potencial en tu área de interés?
+Hora: ${new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City' })}
 
 ---
-🧪 Este es un mensaje de PRUEBA del sistema de Tips Educativos.`;
+Agente Inmobiliario IA 🤖`;
 
-        // Enviar al número del dueño
-        const numeroDestino = '+52' + (process.env.OWNER_WHATSAPP_NUMBER || '9531953182');
+        // Construir número destino
+        const numeroDestino = 'whatsapp:+52' + (ownerNumber || '9531953182').replace(/\D/g, ''); // Limpiar caracteres no numéricos
+        const numeroOrigen = 'whatsapp:' + fromNumber;
 
-        await client.messages.create({
-            from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
-            to: 'whatsapp:' + numeroDestino,
+        console.log(`📨 Intentando enviar de ${numeroOrigen} a ${numeroDestino}`);
+
+        const message = await client.messages.create({
+            from: numeroOrigen,
+            to: numeroDestino,
             body: tipPrueba
         });
 
-        console.log('✅ Tip de prueba enviado a:', numeroDestino);
+        console.log('✅ Twilio Respuesta:', message.sid, message.status);
 
         return res.status(200).json({
             success: true,
-            mensaje: 'Tip de prueba enviado',
-            destino: numeroDestino
+            sid: message.sid,
+            status: message.status,
+            from: numeroOrigen,
+            to: numeroDestino,
+            errorCode: message.errorCode,
+            errorMessage: message.errorMessage
         });
 
     } catch (error) {
-        console.error('❌ Error:', error.message);
-        return res.status(500).json({ success: false, error: error.message });
+        console.error('❌ Error:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
     }
 }
