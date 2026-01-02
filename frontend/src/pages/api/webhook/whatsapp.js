@@ -894,10 +894,17 @@ Aún no sabemos si es inversor o busca vivienda.
 
   instruccionUbicacion = `
   <MANEJO_UBICACION>
-  Si el cliente pide "ubicación", "mapa" o "google maps":
-  1. Si ya estás hablando de una propiedad específica: Proporciona la ubicación aproximada o calles cercanas.
-  2. Si NO hay propiedad seleccionada: Pregunta "¿De qué zona o propiedad te gustaría conocer la ubicación?"
-  3. NUNCA digas "No tenemos propiedades en Google Maps".
+  Si el cliente pide "ubicación", "mapa", "google maps" o "dónde es":
+
+  ✅ DALE EL LINK DE UBICACIÓN QUE APARECE EN EL DOCUMENTO (si existe).
+
+  ⚠️ PERO debes acompañarlo SIEMPRE de esta frase para proteger la venta:
+  "Te comparto la ubicación de referencia de la zona para que ubiques el entorno y accesos. 📍
+  Por privacidad y seguridad, el pin exacto del lote/propiedad te lo muestro físicamente el día de tu visita."
+
+  [Aquí pones el link del documento]
+
+  Si el documento NO tiene link, ofrece agendar visita para conocer la ubicación.
   </MANEJO_UBICACION>
   `;
 
