@@ -9,7 +9,7 @@ import path from 'path';
 // CONFIGURACIÓN
 // ============================================================================
 const CONFIG = {
-  MODEL: 'claude-3-5-haiku-20241022',
+  MODEL: 'claude-3-5-sonnet-20241022',
   MAX_TOKENS: 1024,
   HISTORIAL_LIMITE: 15,
   TIMEZONE: 'America/Mexico_City',
@@ -46,7 +46,7 @@ function getGoogleAuth(scopes) {
     path.join(process.cwd(), 'google-credentials.json');
 
   log('🔑', `Buscando credenciales en: ${keyFile}`);
-
+  
   if (!fs.existsSync(keyFile)) {
     log('❌', `Archivo de credenciales NO existe: ${keyFile}`);
     throw new Error(`Archivo de credenciales no encontrado: ${keyFile}`);
@@ -54,7 +54,7 @@ function getGoogleAuth(scopes) {
 
   const credentialsRaw = fs.readFileSync(keyFile, 'utf8');
   const credentials = JSON.parse(credentialsRaw);
-
+  
   log('✅', `Credenciales cargadas. Client email: ${credentials.client_email}`);
 
   if (credentials.private_key) {
@@ -78,7 +78,7 @@ function normalizarTelefono(telefono) {
     .replace('whatsapp:', '')
     .replace(/\s/g, '')
     .trim();
-
+  
   // Extraer solo los últimos 10 dígitos para comparación más flexible
   return normalizado;
 }
@@ -97,7 +97,7 @@ function telefonosCoinciden(tel1, tel2) {
 async function obtenerEstadoConversacion(telefono) {
   const telefonoNormalizado = normalizarTelefono(telefono);
   log('📖', `Buscando estado para teléfono: ${telefonoNormalizado}`);
-
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -105,17 +105,17 @@ async function obtenerEstadoConversacion(telefono) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Estados!A:S'  // Ampliado A-Z para incluir Perfil, Intención y Seguimiento
+      range: 'Estados!A:L'  // Ampliado para más campos de seguimiento
     });
 
     const rows = response.data.values || [];
     log('📊', `Total filas en Estados: ${rows.length}`);
-
+    
     // DEBUG: Mostrar los últimos 5 teléfonos en la hoja
     const ultimos5 = rows.slice(-5).map(r => r[0]);
     log('🔍', `Últimos 5 teléfonos en hoja: ${JSON.stringify(ultimos5)}`);
     log('🔍', `Buscando exactamente: "${telefonoNormalizado}"`);
-
+    
     // Buscar con teléfono normalizado (comparación flexible por últimos 10 dígitos)
     const estadoRow = rows.find(row => {
       const telEnSheet = row[0] || '';
@@ -140,16 +140,7 @@ async function obtenerEstadoConversacion(telefono) {
         fecha_cita: estadoRow[8] || '',
         propiedad_interes: estadoRow[9] || '',
         primer_contacto: estadoRow[10] || '',
-        notas: estadoRow[11] || '',
-        email: estadoRow[15] || '', // Columna P
-        // Nuevos campos de perfilado (Columnas Q, R)
-        perfil: estadoRow[16] || 'desconocido', // inversor | vivienda | desconocido
-        intencion: estadoRow[17] || '',         // vivir | rentar | revender
-        nivel_seguimiento: parseInt(estadoRow[18] || '0', 10), // Columna S: 0=Nada, 1=Guía, 2=Reactivación
-        // Nuevos campos de Lead Scoring
-        score: parseInt(estadoRow[12] || '0', 10),
-        calificacion: estadoRow[13] || 'COLD ❄️',
-        accion_sugerida: estadoRow[14] || ''
+        notas: estadoRow[11] || ''
       };
       log('✅', 'Estado encontrado', estado);
       return estado;
@@ -168,14 +159,7 @@ async function obtenerEstadoConversacion(telefono) {
       fecha_cita: '',
       propiedad_interes: '',
       primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
-      notas: '',
-      email: '',
-      perfil: 'desconocido',
-      intencion: '',
-      nivel_seguimiento: 0,
-      score: 0,
-      calificacion: 'COLD ❄️',
-      accion_sugerida: 'Perfilamiento inicial'
+      notas: ''
     };
   } catch (error) {
     log('❌', 'Error al obtener estado', { error: error.message });
@@ -191,10 +175,7 @@ async function obtenerEstadoConversacion(telefono) {
       fecha_cita: '',
       propiedad_interes: '',
       primer_contacto: DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd'),
-      notas: '',
-      score: 0,
-      calificacion: 'COLD ❄️',
-      accion_sugerida: 'Error de lectura'
+      notas: ''
     };
   }
 }
@@ -205,7 +186,7 @@ async function obtenerEstadoConversacion(telefono) {
 async function guardarEstadoConversacion(estado) {
   const telefonoNormalizado = normalizarTelefono(estado.telefono);
   log('💾', `Guardando estado para: ${telefonoNormalizado}`, estado);
-
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -223,7 +204,7 @@ async function guardarEstadoConversacion(estado) {
     });
 
     const timestamp = DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss');
-
+    
     // Datos ampliados para seguimiento (12 columnas: A-L)
     const rowData = [
       telefonoNormalizado,                                    // A: Teléfono
@@ -237,23 +218,14 @@ async function guardarEstadoConversacion(estado) {
       estado.fecha_cita || '',                                // I: Fecha de cita agendada
       estado.propiedad_interes || '',                         // J: Propiedad de interés
       estado.primer_contacto || timestamp.split(' ')[0],      // K: Primer contacto
-      estado.notas || '',                                     // L: Notas adicionales
-      // NUEVO: Lead Scoring
-      estado.score || 0,                                      // M: Puntaje numérico
-      estado.score || 0,                                      // M: Puntaje numérico
-      estado.calificacion || 'COLD ❄️',                       // N: Clasificación
-      estado.accion_sugerida || 'Perfilamiento',              // O: Acción recomendada
-      estado.email || '',                                     // P: Email del cliente
-      estado.perfil || 'desconocido',                         // Q: Perfil (inversor/vivienda)
-      estado.intencion || '',                                 // R: Intención de uso
-      estado.nivel_seguimiento || 0                           // S: Nivel de seguimiento (Drip)
+      estado.notas || ''                                      // L: Notas adicionales
     ];
 
     if (rowIndex > -1) {
       log('🔄', `Actualizando fila ${rowIndex + 1}`);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Estados!A${rowIndex + 1}:S${rowIndex + 1}`,
+        range: `Estados!A${rowIndex + 1}:L${rowIndex + 1}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -261,7 +233,7 @@ async function guardarEstadoConversacion(estado) {
       log('➕', 'Creando nueva fila de estado');
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Estados!A:S',
+        range: 'Estados!A:L',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowData] }
       });
@@ -281,7 +253,7 @@ async function guardarEstadoConversacion(estado) {
 async function resetearEstadoCliente(telefono) {
   const telefonoNormalizado = normalizarTelefono(telefono);
   log('🗑️', `Reseteando estado para: ${telefonoNormalizado}`);
-
+  
   const estadoVacio = {
     telefono: telefonoNormalizado,
     tipo_propiedad: '',
@@ -291,7 +263,7 @@ async function resetearEstadoCliente(telefono) {
     resumen: '',
     ultima_actualizacion: ''
   };
-
+  
   await guardarEstadoConversacion(estadoVacio);
   return estadoVacio;
 }
@@ -301,12 +273,12 @@ async function resetearEstadoCliente(telefono) {
 // ============================================================================
 function sesionExpirada(ultimaActualizacion) {
   if (!ultimaActualizacion) return true;
-
+  
   try {
     const ultima = DateTime.fromFormat(ultimaActualizacion, 'yyyy-MM-dd HH:mm:ss', { zone: CONFIG.TIMEZONE });
     const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
     const horasTranscurridas = ahora.diff(ultima, 'hours').hours;
-
+    
     return horasTranscurridas > CONFIG.SESION_TIMEOUT_HORAS;
   } catch {
     return true;
@@ -318,7 +290,7 @@ function sesionExpirada(ultimaActualizacion) {
 // ============================================================================
 async function procesarComandoEspecial(mensaje, telefono, estado) {
   const mensajeLimpio = mensaje.trim();
-
+  
   // Comando: REINICIAR
   if (COMANDOS.REINICIAR.test(mensajeLimpio)) {
     await resetearEstadoCliente(telefono);
@@ -327,7 +299,7 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
       respuesta: `🔄 ¡Listo! He reiniciado tu búsqueda.\n\n¡Hola! 👋 Soy Ana, tu asesora inmobiliaria. ¿Qué tipo de propiedad estás buscando hoy?\n\n• 🏠 Casa\n• 🏢 Departamento\n• 🌳 Terreno\n• 🏪 Local comercial`
     };
   }
-
+  
   // Comando: AYUDA
   if (COMANDOS.AYUDA.test(mensajeLimpio)) {
     return {
@@ -335,20 +307,19 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
       respuesta: `📋 *Comandos disponibles:*\n\n• *reiniciar* - Empezar una nueva búsqueda\n• *estado* - Ver tus datos guardados\n• *ayuda* - Ver este menú\n\n💡 También puedes simplemente decirme qué tipo de propiedad buscas, en qué zona y tu presupuesto.`
     };
   }
-
+  
   // Comando: ESTADO
   if (COMANDOS.ESTADO.test(mensajeLimpio)) {
     const tipo = estado.tipo_propiedad || '❌ No definido';
     const zona = estado.zona || '❌ No definida';
     const presupuesto = estado.presupuesto || '❌ No definido';
-    const email = estado.email || '❌ No definido'; // Added email
-
+    
     return {
       esComando: true,
-      respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n📧 Email: ${email}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
+      respuesta: `📊 *Tu búsqueda actual:*\n\n🏠 Tipo: ${tipo}\n📍 Zona: ${zona}\n💰 Presupuesto: ${presupuesto}\n\n💡 Escribe *reiniciar* para empezar una nueva búsqueda.`
     };
   }
-
+  
   return { esComando: false };
 }
 
@@ -358,33 +329,26 @@ async function procesarComandoEspecial(mensaje, telefono, estado) {
 function detectarDatosEnMensaje(mensaje) {
   const mensajeLower = mensaje.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let datos = {};
-
+  
   // DETECTAR NOMBRE DEL CLIENTE
   const matchNombre = mensaje.match(/(?:me llamo|soy|mi nombre es)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/i);
   if (matchNombre) {
     datos.nombre_cliente = matchNombre[1].trim();
     log('👤', `Nombre detectado: ${datos.nombre_cliente}`);
   }
-
-  // DETECTAR EMAIL
-  const matchEmail = mensaje.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
-  if (matchEmail) {
-    datos.email = matchEmail[0].trim();
-    log('📧', `Email detectado: ${datos.email}`);
-  }
-
+  
   // DETECTAR CAMBIO DE OPINIÓN
-  const quiereCambiar =
+  const quiereCambiar = 
     /\b(mejor|cambio|cambie|prefiero|en realidad|ya no|ahora quiero|pensandolo bien|pensándolo bien)\b/i.test(mensajeLower) ||
     /\b(otra|otras|otro|otros|diferentes?)\s*(opciones?|propiedades?|casas?|terrenos?|departamentos?)\b/i.test(mensajeLower) ||
     /\b(no me convence|no me gusta|muy caro|muy lejos|busco otra|vemos otra|muestrame otra|muéstrame otra)\b/i.test(mensajeLower) ||
     /\b(cancelar?|no quiero|dejalo|déjalo|olvidalo|olvídalo)\s*(la cita|agendar|visita)?\b/i.test(mensajeLower);
-
+  
   if (quiereCambiar) {
     datos.cambio_opinion = true;
     log('🔄', 'Detectado: cliente quiere cambiar/ver otras opciones');
   }
-
+  
   // DETECTAR CANCELACIÓN ESPECÍFICA
   const quiereCancelar = /\b(cancelar?|no quiero|ya no|dejalo|déjalo)\s*(la cita|agendar|visita|ir)?\b/i.test(mensajeLower);
   if (quiereCancelar) {
@@ -415,23 +379,8 @@ function detectarDatosEnMensaje(mensaje) {
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
-
-    // FIX: Evitar detectar "Google Maps" o palabras de ubicación como zona
-    const terminosIgnorados = ['Google Maps', 'Maps', 'Ubicacion', 'Ubicación', 'Donde', 'Mapa', 'Direccion', 'Dirección'];
-    const esTerminoIgnorado = terminosIgnorados.some(t => zonaDetectada.includes(t) || zonaDetectada.toLowerCase().includes('google'));
-
-    if (!esTerminoIgnorado) {
-      datos.zona = zonaDetectada;
-      log('📍', `Zona detectada del mensaje: ${zonaDetectada}`);
-    } else {
-      log('⚠️', `Zona ignorada por ser término de ubicación: ${zonaDetectada}`);
-    }
-  }
-
-  // DETECTAR SOLICITUD DE UBICACIÓN
-  if (/\b(ubicacion|mapa|google maps|donde es|donde esta|coordenadas|geo|llegar)\b/i.test(mensajeLower)) {
-    datos.pide_ubicacion = true;
-    log('🗺️', 'Detectado: Solicitud de ubicación/mapa');
+    datos.zona = zonaDetectada;
+    log('📍', `Zona detectada del mensaje: ${zonaDetectada}`);
   }
 
   // PRESUPUESTO
@@ -443,7 +392,7 @@ function detectarDatosEnMensaje(mensaje) {
     if (matchNumero) {
       const numero = parseInt(matchNumero[1].replace(/,/g, ''), 10);
       if (numero >= 100000) {
-        datos.presupuesto = numero >= 1000000
+        datos.presupuesto = numero >= 1000000 
           ? `${(numero / 1000000).toFixed(1)} millones de pesos`
           : `${numero.toLocaleString('es-MX')} pesos`;
       }
@@ -451,30 +400,30 @@ function detectarDatosEnMensaje(mensaje) {
   }
 
   // DETECTAR INTENCIÓN DE AGENDAR
-  const quiereAgendar =
+  const quiereAgendar = 
     /^(si|sí|claro|por favor|ok|va|dale|okay|perfecto|por supuesto|desde luego)[\s.,!?]*$/i.test(mensaje.trim()) ||
     /\b(quiero|quisiera|me gustaria|me gustaría|podemos|podriamos|podríamos)\s+(agendar|visitar|ver|conocer|ir)\b/i.test(mensajeLower) ||
     /\b(si|sí),?\s*(por favor|quiero|me interesa)/i.test(mensajeLower) ||
     /\bagendame\b|\bagenda\b|\bvisita\b/i.test(mensajeLower);
-
+  
   if (quiereAgendar) {
     datos.quiere_agendar = true;
     log('📅', 'Detectado: cliente quiere agendar');
   }
 
   // DETECTAR FECHA/HORA proporcionada
-  const tieneFecha =
+  const tieneFecha = 
     /\b(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/i.test(mensajeLower) ||
     /\b(mañana|pasado\s*mañana|hoy|esta\s*semana|proxima\s*semana|próxima\s*semana)\b/i.test(mensajeLower) ||
     /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower) ||
     /\b\d{1,2}\s*(de|\/|-)\s*\d{1,2}\b/i.test(mensajeLower) ||
     /\b\d{1,2}\s*(de|del)\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(mensajeLower);
-
-  const tieneHora =
+  
+  const tieneHora = 
     /\b\d{1,2}:\d{2}\b/.test(mensajeLower) ||
     /\b\d{1,2}\s*(am|pm|hrs|horas|de la mañana|de la tarde|de la noche)\b/i.test(mensajeLower) ||
     /\b(a las|alas)\s*\d{1,2}\b/i.test(mensajeLower);
-
+  
   if (tieneFecha || tieneHora) {
     datos.tiene_fecha = true;
     log('🗓️', 'Detectado: cliente proporcionó fecha/hora');
@@ -482,8 +431,8 @@ function detectarDatosEnMensaje(mensaje) {
 
   // DETECTAR INTERÉS EN OPCIÓN ESPECÍFICA
   if (/\b(el|la|ese|esa|este|esta)\s*(primero|primer|1|uno|lote|terreno|casa|opcion|opción)\b/i.test(mensajeLower) ||
-    /\b(me interesa|me gusta|quiero)\s*(el|la|ese|esa)?\s*(primero|1|uno|lote|terreno|opcion)\b/i.test(mensajeLower) ||
-    /^(el\s*)?(1|2|3|primero|segundo|tercero|uno|dos|tres)[\s.,]*$/i.test(mensaje.trim())) {
+      /\b(me interesa|me gusta|quiero)\s*(el|la|ese|esa)?\s*(primero|1|uno|lote|terreno|opcion)\b/i.test(mensajeLower) ||
+      /^(el\s*)?(1|2|3|primero|segundo|tercero|uno|dos|tres)[\s.,]*$/i.test(mensaje.trim())) {
     datos.mostro_interes = true;
     log('👆', 'Detectado: cliente mostró interés en opción específica');
   }
@@ -524,93 +473,7 @@ function detectarDatosEnMensaje(mensaje) {
     log('🏠', 'Detectado: cliente quiere cambiar tipo de propiedad');
   }
 
-  // DETECTAR PERFIL INVERSOR
-  const palabrasInversion = /\b(inversion|inversión|invertir|rentabilidad|roi|ganancia|negocio|plusvalia|plusvalía|revender|preventa|lote de inversion|macrolote|mayoreo)\b/i;
-  if (palabrasInversion.test(mensajeLower)) {
-    datos.perfil = 'inversor';
-    datos.intencion = 'negocio'; // Default para inversor, se puede refinar
-    if (/\b(rentar|rentas|flujo)\b/i.test(mensajeLower)) datos.intencion = 'rentar';
-    if (/\b(revender|venta futura|capitalizar)\b/i.test(mensajeLower)) datos.intencion = 'revender';
-    log('💰', 'Detectado: PERFIL INVERSOR');
-  }
-
-  // DETECTAR PERFIL VIVIENDA (VIDA PERSONAL)
-  const palabrasVivienda = /\b(vivir|mi casa|mi familia|hijos|escuela|trabajo|cerca de mi|mudarme|habitar|crédito|credito|infonavit|fovissste)\b/i;
-  if (palabrasVivienda.test(mensajeLower)) {
-    datos.perfil = 'vivienda';
-    datos.intencion = 'vivir';
-    log('🏠', 'Detectado: PERFIL VIVIENDA');
-  }
-
-  // DETECTAR MÉTODO DE PAGO (Clave para scoring)
-  if (/\b(contado|efectivo|transferencia|recursos propios|liquidez)\b/i.test(mensajeLower)) {
-    datos.metodo_pago = 'contado';
-    log('💵', 'Detectado: Pago de CONTADO');
-  } else if (/\b(credito|crédito|hipoteca|infonavit|banco|financiamiento)\b/i.test(mensajeLower)) {
-    datos.metodo_pago = 'credito';
-    log('🏦', 'Detectado: Pago con CRÉDITO');
-
-    if (/\b(aprobado|autorizado|ya tengo|listo)\b/i.test(mensajeLower)) {
-      datos.credito_status = 'aprobado';
-      log('✅', 'Detectado: Crédito APROBADO');
-    }
-  }
-
   return datos;
-}
-
-// ============================================================================
-// LEAD SCORING: SISTEMA DE CALIFICACIÓN (V2.0 - Perfilado)
-// ============================================================================
-function calcularLeadScore(estado) {
-  let score = 0;
-
-  // 1. IDENTIDAD BÁSICA (+30 pts máx)
-  if (estado.nombre_cliente && estado.nombre_cliente.length > 2) score += 5;
-  if (estado.presupuesto) score += 15;
-  if (estado.zona) score += 5;
-  if (estado.tipo_propiedad) score += 5;
-
-  // 2. PERFIL E INTENCIÓN (+40 pts máx)
-  if (estado.perfil === 'inversor') {
-    score += 10; // Inversor suele ser más transaccional
-    if (estado.metodo_pago === 'contado') score += 20; // CASH IS KING
-    if (estado.intencion === 'negocio' || estado.intencion === 'revender') score += 5;
-  } else if (estado.perfil === 'vivienda') {
-    if (estado.credito_status === 'aprobado') score += 25; // Crédito listo es oro
-    else if (estado.metodo_pago === 'credito') score += 10;
-    if (estado.intencion === 'vivir') score += 5;
-  }
-
-  // 3. COMPORTAMIENTO (+30 pts máx)
-  if (estado.etapa === 'interesado') score += 10;
-  if (estado.etapa === 'esperando_fecha') score += 20;
-  if (estado.etapa === 'agendar') score += 15;
-  if (estado.email) score += 10;
-
-  // 4. GAME CHANGERS (Cita confirmada)
-  if (estado.etapa === 'cita_agendada') return 100;
-
-  return Math.min(score, 99);
-}
-
-function obtenerClasificacion(score) {
-  if (score >= 80) return { label: 'HOT 🔥', accion: '⚠️ CIERRE PRIORITARIO: Agendar visita YA' };
-  if (score >= 50) return { label: 'WARM ⛅', accion: 'Seguimiento semanal: Enviar nuevas opciones' };
-  return { label: 'COLD ❄️', accion: 'Nutrir: Enviar contenido de valor mensual' };
-}
-
-// Helper para inyectar score antes de retornar
-function finalizarEstadoConScore(estado) {
-  const score = calcularLeadScore(estado);
-  const clasificacion = obtenerClasificacion(score);
-
-  return {
-    ...estado,
-    score,
-    calificacion: clasificacion.label,
-    accion_sugerida: clasificacion.accion
-  };
 }
 
 // ============================================================================
@@ -618,16 +481,16 @@ function finalizarEstadoConScore(estado) {
 // ============================================================================
 function actualizarEstadoConDatos(estadoActual, datosNuevos) {
   let nuevaEtapa = estadoActual.etapa;
-
+  
   // Determinar datos finales
   let tipoFinal = datosNuevos.tipo_propiedad || estadoActual.tipo_propiedad;
   let zonaFinal = datosNuevos.zona || estadoActual.zona;
   let presupuestoFinal = datosNuevos.presupuesto || estadoActual.presupuesto;
-
+  
   // NUEVA BÚSQUEDA COMPLETA - Limpiar todo y empezar de cero
   if (datosNuevos.nueva_busqueda && !datosNuevos.tipo_propiedad && !datosNuevos.zona) {
     log('🆕', 'Nueva búsqueda detectada - limpiando datos anteriores');
-    return finalizarEstadoConScore({
+    return {
       ...estadoActual,
       tipo_propiedad: '',
       zona: '',
@@ -635,16 +498,16 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       etapa: 'inicial',
       propiedad_interes: '',
       fecha_cita: ''
-    });
+    };
   }
-
+  
   // CAMBIAR ZONA - Limpiar zona y volver a preguntar
   if (datosNuevos.cambiar_zona && !datosNuevos.zona) {
     log('📍', 'Cambio de zona detectado - limpiando zona anterior');
     zonaFinal = '';  // Forzar a preguntar zona de nuevo
     nuevaEtapa = 'busqueda';
   }
-
+  
   // CAMBIAR TIPO - Limpiar tipo y usar el nuevo si lo dio
   if (datosNuevos.cambiar_tipo) {
     log('🏠', 'Cambio de tipo detectado');
@@ -655,11 +518,11 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     }
     nuevaEtapa = 'busqueda';
   }
-
+  
   // CAMBIO DE OPINIÓN - Retroceder etapa
   if (datosNuevos.cambio_opinion || datosNuevos.quiere_cancelar) {
     log('🔄', 'Procesando cambio de opinión...');
-
+    
     if (datosNuevos.quiere_cancelar) {
       // Cancelación: volver a interesado o búsqueda
       nuevaEtapa = tipoFinal ? 'busqueda' : 'inicial';
@@ -673,7 +536,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       nuevaEtapa = 'busqueda';
       log('📊', 'Quiere otras opciones. Etapa: busqueda');
     }
-
+    
     const estadoNuevo = {
       ...estadoActual,
       tipo_propiedad: tipoFinal,
@@ -682,13 +545,13 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       etapa: nuevaEtapa,
       cambio_opinion: true
     };
-    return finalizarEstadoConScore(estadoNuevo);
+    return estadoNuevo;
   }
-
+  
   // CLIENTE CON CITA AGENDADA - Manejar diferentes intenciones
   if (estadoActual.etapa === 'cita_agendada') {
     log('📋', 'Cliente con cita agendada, analizando intención...');
-
+    
     if (datosNuevos.quiere_reagendar) {
       // Quiere cambiar la cita → volver a esperando_fecha
       nuevaEtapa = 'esperando_fecha';
@@ -709,24 +572,23 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
       log('📊', 'Consulta sobre cita existente. Etapa: cita_agendada');
     }
     // Si no detectamos intención específica, mantener cita_agendada
-
+    
     const estadoNuevo = {
       ...estadoActual,
       tipo_propiedad: tipoFinal,
       zona: zonaFinal,
       presupuesto: presupuestoFinal,
       etapa: nuevaEtapa,
-      nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || '',
-      email: datosNuevos.email || estadoActual.email || ''
+      nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
     };
-    return finalizarEstadoConScore(estadoNuevo);
+    return estadoNuevo;
   }
-
+  
   const tieneTodosDatos = tipoFinal && zonaFinal && presupuestoFinal;
-
+  
   // Lógica de etapas (en orden de prioridad)
   if (datosNuevos.tiene_fecha) {
-    // Cliente dio fecha → listo para agendar (PERO validar email en prompt)
+    // Cliente dio fecha → listo para agendar
     nuevaEtapa = 'esperando_fecha';
     log('📊', 'Etapa actualizada: esperando_fecha');
   } else if (datosNuevos.quiere_agendar && estadoActual.etapa !== 'esperando_fecha') {
@@ -742,31 +604,24 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
     nuevaEtapa = 'busqueda';
     log('📊', 'Etapa actualizada: busqueda');
   }
-
+  
   const estadoNuevo = {
     ...estadoActual,
     tipo_propiedad: tipoFinal,
     zona: zonaFinal,
     presupuesto: presupuestoFinal,
     etapa: nuevaEtapa,
-    // Agregar nombre y email si se detectaron
-    nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || '',
-    email: datosNuevos.email || estadoActual.email || '',
-    // Actualizar perfil solo si se detectó uno nuevo, sino mantener el anterior
-    perfil: datosNuevos.perfil || estadoActual.perfil || 'desconocido',
-    intencion: datosNuevos.intencion || estadoActual.intencion || '',
-    metodo_pago: datosNuevos.metodo_pago || estadoActual.metodo_pago || '',
-    credito_status: datosNuevos.credito_status || estadoActual.credito_status || '',
-    nivel_seguimiento: estadoActual.nivel_seguimiento || 0 // Mantener nivel actual
+    // Agregar nombre si se detectó
+    nombre_cliente: datosNuevos.nombre_cliente || estadoActual.nombre_cliente || ''
   };
-
-  log('📋', 'Estado actualizado', {
-    antes: estadoActual.etapa,
+  
+  log('📋', 'Estado actualizado', { 
+    antes: estadoActual.etapa, 
     despues: nuevaEtapa,
     datos: { tipo: tipoFinal, zona: zonaFinal, presupuesto: presupuestoFinal }
   });
-
-  return finalizarEstadoConScore(estadoNuevo);
+  
+  return estadoNuevo;
 }
 
 // ============================================================================
@@ -774,7 +629,7 @@ function actualizarEstadoConDatos(estadoActual, datosNuevos) {
 // ============================================================================
 async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_LIMITE) {
   const telefonoNormalizado = normalizarTelefono(telefono);
-
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -786,13 +641,13 @@ async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_
     });
 
     const rows = response.data.values || [];
-
+    
     // Filtrar mensajes del cliente (comparación flexible)
     const mensajesCliente = rows.filter(row => {
       const telEnSheet = row[1] || '';
       return telefonosCoinciden(telEnSheet, telefonoNormalizado);
     });
-
+    
     log('📚', `Mensajes encontrados para ${telefonoNormalizado}: ${mensajesCliente.length} de ${rows.length} total`);
 
     // Tomar los últimos N mensajes (excluyendo el actual que aún no se ha procesado completamente)
@@ -815,7 +670,7 @@ async function obtenerHistorialConversacion(telefono, limite = CONFIG.HISTORIAL_
 // ============================================================================
 async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }) {
   const telefonoNormalizado = normalizarTelefono(telefono);
-
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets']);
     const sheets = google.sheets({ version: 'v4', auth });
@@ -826,8 +681,8 @@ async function guardarMensajeEnSheet({ telefono, direccion, mensaje, messageId }
       spreadsheetId,
       range: 'Mensajes!A:E',
       valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[timestamp, telefonoNormalizado, direccion, mensaje, messageId || '']]
+      requestBody: { 
+        values: [[timestamp, telefonoNormalizado, direccion, mensaje, messageId || '']] 
       }
     });
 
@@ -846,36 +701,7 @@ function construirSystemPrompt(estado) {
   const zona = estado.zona || null;
   const presupuesto = estado.presupuesto || null;
   const etapa = estado.etapa || 'inicial';
-  const perfil = estado.perfil || 'desconocido';
-
-  // INSTRUCCIONES DE TONO SEGÚN PERFIL
-  let tonoInstruccion = '';
-  if (perfil === 'inversor') {
-    tonoInstruccion = `
-<MODO_INVERSOR>
-Este cliente es un INVERSOR.
-- Tono: Analítico, profesional, directo, enfocado en ROI y plusvalía.
-- NO hables de "hogar para tu familia" o emociones cursis.
-- Habla de: Rentabilidad, crecimiento de zona, precios competitivos, oportunidad de negocio.
-- Si pregunta precios, destaca la oportunidad de inversión.
-</MODO_INVERSOR>`;
-  } else if (perfil === 'vivienda') {
-    tonoInstruccion = `
-<MODO_VIVIENDA>
-Este cliente busca VIVIENDA PERSONAL.
-- Tono: Empático, cálido, enfocado en bienestar, seguridad y familia.
-- Habla de: Comodidad, cercanía a servicios, tranquilidad, espacios para disfrutar.
-- Ayúdalo a visualizarse viviendo ahí.
-</MODO_VIVIENDA>`;
-  } else {
-    tonoInstruccion = `
-<MODO_GENERAL>
-Aún no sabemos si es inversor o busca vivienda.
-- Mantén un tono profesional pero amable.
-- Trata de inferir su perfil con tus preguntas sutilmente.
-</MODO_GENERAL>`;
-  }
-
+  
   const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
   const fechaHoy = ahora.toFormat("EEEE d 'de' MMMM 'de' yyyy", { locale: 'es' });
   const horaActual = ahora.toFormat('HH:mm');
@@ -885,32 +711,10 @@ Aún no sabemos si es inversor o busca vivienda.
   if (!tipo) datosFaltantes.push('tipo de propiedad');
   if (!zona) datosFaltantes.push('zona');
   if (!presupuesto) datosFaltantes.push('presupuesto');
-
-  // Instrucción especial para Ubicación
-  let instruccionUbicacion = '';
-  // Si NO estamos en etapa inicial y piden ubicación, forzar a darla si se tiene contexto
-  // Esta lógica se insertará dinámicamente si el último mensaje (que no tenemos aquí parseado como intent, pero Claude lo verá) pide maps.
-  // Pero podemos agregar una regla general:
-
-  instruccionUbicacion = `
-  <MANEJO_UBICACION>
-  Si el cliente pide "ubicación", "mapa", "google maps" o "dónde es":
-
-  ✅ DALE EL LINK DE UBICACIÓN QUE APARECE EN EL DOCUMENTO (si existe).
-
-  ⚠️ PERO debes acompañarlo SIEMPRE de esta frase para proteger la venta:
-  "Te comparto la ubicación de referencia de la zona para que ubiques el entorno y accesos. 📍
-  Por privacidad y seguridad, el pin exacto del lote/propiedad te lo muestro físicamente el día de tu visita."
-
-  [Aquí pones el link del documento]
-
-  Si el documento NO tiene link, ofrece agendar visita para conocer la ubicación.
-  </MANEJO_UBICACION>
-  `;
-
+  
   // Determinar la siguiente acción según el estado
   let instruccionEspecifica = '';
-
+  
   if (datosFaltantes.length === 3) {
     instruccionEspecifica = `
 <accion_requerida>
@@ -939,18 +743,16 @@ Pregunta cuál le interesa.
   } else if (etapa === 'interesado') {
     instruccionEspecifica = `
 <accion_requerida>
-El cliente ya mostró interés en una propiedad específica tras ver las opciones.
+El cliente ya mostró interés en una propiedad específica.
 
-📍 OBJETIVO CRÍTICO: CONSEGUIR EL EMAIL
-Si NO tenemos el email del cliente (${estado.email ? 'YA LO TENEMOS: ' + estado.email : 'AÚN NO LO TENEMOS'}):
+📸 SI PIDE FOTOS/IMÁGENES:
+→ USA "consultar_documentos" OBLIGATORIAMENTE con tipo="${tipo}", zona="${zona}", presupuesto="${presupuesto}"
+→ Di: "¡Claro! Aquí tienes las fotos:"
+→ INCLUYE LOS LINKS DE LAS FOTOS EN TU RESPUESTA DE TEXTO.
+→ NO digas que las envías por separado.
 
-1. Di: "¡Excelente elección! 🏠 Esa propiedad es una gran oportunidad. Para enviarte la ficha técnica completa con ubicación exacta, fotos en alta calidad y planes de financiamiento, ¿a qué correo te la envío?"
-2. NO intentes agendar cita todavía. PRIMERO asegura el contacto.
-
-Si YA tenemos el email:
-1. Pregunta si tiene alguna duda específica.
-2. Invita a verlo: "¿Te gustaría agendar una visita para conocerlo en persona? 📅"
-
+Si pregunta más detalles → dáselos brevemente.
+Si dice "sí" o confirma interés → pregunta: "¿Qué día y hora te funcionaría para visitarlo? 📅"
 NO vuelvas a listar todas las opciones.
 </accion_requerida>`;
   } else if (etapa === 'agendar') {
@@ -961,27 +763,18 @@ El cliente QUIERE AGENDAR. Tu ÚNICA respuesta debe ser:
 NO des más información. NO repitas detalles. SOLO pregunta la fecha.
 </accion_requerida>`;
   } else if (etapa === 'esperando_fecha') {
-    if (!estado.email) {
-      instruccionEspecifica = `
+    instruccionEspecifica = `
 <accion_requerida>
-El cliente quiere agendar, pero FALTA SU CORREO.
-Di: "¡Excelente! Para confirmar tu cita y enviarte la ubicación exacta 📍, necesito que me compartas tu correo electrónico, por favor."
-NO confirmes la cita sin el correo.
-</accion_requerida>`;
-    } else {
-      instruccionEspecifica = `
-<accion_requerida>
-Estás esperando fecha/hora y YA TIENES el correo (${estado.email}).
-Cuando el cliente confirme la hora, USA "agendar_cita" inmediatamente.
-Al confirmar, menciona: "Te he enviado la ubicación a tu correo y por aquí."
+Estás esperando que el cliente dé fecha/hora.
+Cuando la dé, USA "agendar_cita" inmediatamente.
 Convierte fechas relativas: "mañana" = ${ahora.plus({ days: 1 }).toFormat('yyyy-MM-dd')}
+"pasado mañana" = ${ahora.plus({ days: 2 }).toFormat('yyyy-MM-dd')}
 </accion_requerida>`;
-    }
   } else if (etapa === 'cita_agendada') {
     // Calcular días desde la cita
     const fechaCita = estado.fecha_cita ? DateTime.fromFormat(estado.fecha_cita.split(' ')[0], 'yyyy-MM-dd', { zone: CONFIG.TIMEZONE }) : null;
     const diasDesdeCita = fechaCita ? Math.floor(ahora.diff(fechaCita, 'days').days) : 0;
-
+    
     instruccionEspecifica = `
 <accion_requerida>
 Este cliente YA TIENE UNA CITA AGENDADA.
@@ -1039,9 +832,6 @@ Tu objetivo:
    3. Si la zona NO aparece → responde: "Por el momento no tenemos propiedades en [zona]. ¿Te gustaría conocer las zonas donde sí tenemos opciones?"
 
 ###############################################################
-${tonoInstruccion}
-${instruccionUbicacion}
-###############################################################
 
 Eres Ana, asesora inmobiliaria profesional.
 Fecha actual: ${fechaHoy}, ${horaActual} hrs.
@@ -1058,9 +848,7 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 1. SIEMPRE usa "consultar_documentos" ANTES de hablar de propiedades
 2. Si el resultado dice "zona no encontrada" o la zona no aparece → di que no tienes disponibilidad
 3. SOLO menciona lo que EXISTE en el documento
-4. ANTES DE AGENDAR: Usa "consultar_disponibilidad" para verificar que el horario esté libre.
-5. Si el horario está ocupado, ofrece alternativas cercanas.
-6. Si inventas información, el cliente recibirá datos falsos - esto es INACEPTABLE
+4. Si inventas información, el cliente recibirá datos falsos - esto es INACEPTABLE
 </REGLA_INFORMACION>
 
 <datos_del_cliente>
@@ -1069,7 +857,6 @@ Fecha actual: ${fechaHoy}, ${horaActual} hrs.
 - Zona de interés: ${zona || '❌ Pendiente'}
 - Presupuesto: ${presupuesto || '❌ Pendiente'}
 - Etapa actual: ${etapa}
-- Perfil detectado: ${perfil.toUpperCase()}
 </datos_del_cliente>
 
 ${instruccionEspecifica}
@@ -1130,104 +917,27 @@ Hora por defecto si no especifica: 10:00
 - No hagas introducciones largas
 - No repitas lo que el cliente ya sabe
 - Termina con UNA pregunta o acción clara
+- Si el cliente pide fotos, proporciona los links de las imágenes en texto (NO se envían como imagen)
 </formato_respuesta>
 
-<REGLA_CRITICA_SIN_FOTOS_AUTOMATICAS>
-🚨 REGLA ABSOLUTAMENTE CRÍTICA - NO INCLUIR FOTOS AUTOMÁTICAMENTE:
-
-Cuando muestres propiedades al cliente (casas, terrenos, departamentos):
-❌ NUNCA incluyas links de fotos automáticamente
-❌ NUNCA incluyas URLs de imágenes en la descripción de la propiedad
-❌ NUNCA menciones "aquí están las fotos" si el cliente NO las pidió
-
-✅ SOLO muestra:
-- Tipo de propiedad
-- Ubicación
-- Precio
-- Características principales
-- Pregunta si le interesa o quiere más detalles
-
-El cliente debe PEDIR EXPLÍCITAMENTE las fotos para recibirlas.
-</REGLA_CRITICA_SIN_FOTOS_AUTOMATICAS>
-
 <REGLA_CRITICA_FOTOS>
-⚠️ REGLA OBLIGATORIA - SOLO CUANDO EL CLIENTE PIDA FOTOS/IMAGENES:
+⚠️ REGLA OBLIGATORIA - CUANDO EL CLIENTE PIDA FOTOS/IMAGENES:
 
-El cliente DEBE decir explícitamente: "fotos", "foto", "imágenes", "imagen", "ver fotos", "muestra fotos", "manda fotos", "envía fotos"
+Si el mensaje contiene: "foto", "fotos", "imagen", "imagenes", "ver", "muestra", "enseña", "dame fotos"
 
-SOLO SI EL CLIENTE PIDE FOTOS, entonces:
-1. USA la herramienta "consultar_documentos" para obtener los links
-2. INCLUYE LOS LINKS en tu respuesta de texto como links clickeables
-3. Formato: "Aquí están las fotos: 📸\n🔗 [link1]\n🔗 [link2]"
+DEBES HACER ESTO:
+1. USA la herramienta "consultar_documentos" con tipo="${tipo || 'casa'}", zona="${zona || 'general'}", presupuesto="${presupuesto || 'cualquiera'}"
+2. Responde: "¡Claro! Te envío unas fotos de la propiedad 📸" (o similar)
+3. El sistema enviará las imágenes AUTOMÁTICAMENTE
 
 ❌ NUNCA digas:
-- "Te envío las fotos" (porque NO se envían como imágenes)
-- "Recibirás las fotos por separado"
+- "No puedo mostrar fotos"
+- "No puedo enviar imágenes"
+- "Visita la propiedad para ver"
+- "Solicita el catálogo por correo"
 
-✅ SÍ di:
-- "Aquí están los links de las fotos: [links]"
-- "Da click en estos enlaces para verlas: [links]"
-
-🎯 IMPORTANTE: Los links solo se comparten cuando el cliente los PIDA EXPLÍCITAMENTE.
-</REGLA_CRITICA_FOTOS>
-
-<CONOCIMIENTO_EDUCATIVO>
-📚 CÁPSULAS DE SABIDURÍA INMOBILIARIA
-Tienes conocimiento experto que DEBES compartir de forma natural cuando sea relevante.
-NO esperes a que el cliente pregunte - TÚ eres la experta y debes educar.
-
-🎯 CUÁNDO USAR ESTOS DATOS:
-- Cuando el cliente duda sobre un precio → Menciona plusvalía o tendencias
-- Cuando pregunta "¿es buen momento?" → Comparte datos del mercado
-- Cuando menciona crédito/Infonavit → Edúcalo sobre el proceso
-- Cuando está indeciso entre zonas → Compara con datos objetivos
-- Cuando muestra interés pero no avanza → Crea urgencia con información real
-
-📊 DATOS DEL MERCADO (Úsalos sutilmente):
-1. "Las propiedades en zonas de desarrollo suelen aumentar 8-15% de valor anual."
-2. "Comprar en preventa puede significar un ahorro del 15-25% vs precio terminado."
-3. "El mejor momento para invertir es ANTES de que lleguen servicios y comercios a la zona."
-4. "Los terrenos son la inversión más segura: no se deprecian y el mantenimiento es mínimo."
-5. "Las zonas cerca de nuevas carreteras o centros comerciales proyectan mayor plusvalía."
-
-💰 SOBRE FINANCIAMIENTO (Si detectas perfil VIVIENDA):
-1. "Con Infonavit puedes usar tu crédito + subcuenta de vivienda + ahorro personal."
-2. "El enganche típico es del 10-20% del valor de la propiedad."
-3. "Algunos desarrollos ofrecen planes de financiamiento directo sin buró de crédito."
-4. "Es mejor comprar joven: las mensualidades se ajustan a tu capacidad y pagas menos intereses."
-5. "Si ya tienes un crédito aprobado, tienes ventaja porque puedes cerrar más rápido."
-
-📈 PARA INVERSORES (Si detectas perfil INVERSOR):
-1. "Los primeros compradores en desarrollos nuevos obtienen los mejores precios."
-2. "Un terreno bien ubicado puede duplicar su valor en 3-5 años."
-3. "Invertir en lotes es ideal porque no requiere mantenimiento ni pago de servicios."
-4. "La preventa permite 'apartar' la plusvalía futura a precio de hoy."
-5. "Muchos inversionistas compran 2-3 lotes: uno para construir y otros para revender."
-
-🏠 CONSEJOS PRÁCTICOS (Para cualquier cliente):
-1. "Siempre verifica que el terreno tenga escrituras y esté libre de gravámenes."
-2. "Visitar la propiedad en persona te ayuda a sentir el ambiente de la zona."
-3. "Pregunta por el plan de desarrollo urbano de la zona - te dice cómo crecerá."
-4. "Los mejores días para visitar son entre semana, cuando hay menos gente y más atención."
-5. "Toma tu tiempo para decidir, pero recuerda que las mejores ubicaciones se van primero."
-
-⚡ CÓMO INSERTAR ESTA INFORMACIÓN:
-- NO la sueltes toda de golpe
-- Insértala NATURALMENTE en la conversación
-- Máximo 1-2 datos por mensaje
-- Usa frases como:
-  • "Por cierto, algo que debes saber es que..."
-  • "Un dato interesante de esta zona..."
-  • "Algo que mis clientes valoran mucho es..."
-  • "Te comparto un tip: ..."
-
-EJEMPLO DE USO CORRECTO:
-Cliente: "¿Cuánto cuesta el terreno en Zona Norte?"
-Tú: "Ese terreno está en $850,000. 📍 Por cierto, esa zona tiene proyectado un nuevo centro comercial para 2025, lo que significa que quienes compren ahora verán crecer su inversión. ¿Te gustaría conocer más detalles?"
-
-EJEMPLO INCORRECTO (NO hacer):
-"Aquí están 10 tips sobre inversión inmobiliaria..." ❌
-</CONOCIMIENTO_EDUCATIVO>`;
+✅ SÍ PUEDES enviar fotos - USA LA HERRAMIENTA consultar_documentos
+</REGLA_CRITICA_FOTOS>`;
 }
 
 // ============================================================================
@@ -1236,7 +946,7 @@ EJEMPLO INCORRECTO (NO hacer):
 const tools = [
   {
     name: 'consultar_documentos',
-    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto. IMPORTANTE: Esta herramienta devuelve el contenido del documento que incluye URLs de FOTOS de las propiedades. Cuando el cliente pide fotos, USA ESTA HERRAMIENTA y luego INCLUYE LOS LINKS DE LAS FOTOS en tu respuesta de texto para que el cliente pueda dar click y verlas. NO se envían como imágenes, solo como links clickeables.',
+    description: 'Busca propiedades disponibles en el catálogo. USAR cuando ya tengas: tipo de propiedad + zona + presupuesto. IMPORTANTE: Esta herramienta también devuelve URLs de FOTOS de las propiedades. Cuando el cliente pide fotos, USA ESTA HERRAMIENTA - el sistema enviará las imágenes automáticamente.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1249,28 +959,16 @@ const tools = [
   },
   {
     name: 'agendar_cita',
-    description: 'Agenda una visita a una propiedad. IMPORTANTE: Solo usar cuando el cliente YA HAYA PROPORCIONADO una fecha y hora específicas Y hayas verificado la disponibilidad. Si el cliente dice "sí quiero agendar" pero NO ha dado fecha, NO uses esta herramienta - primero pregúntale qué día y hora le conviene.',
+    description: 'Agenda una visita a una propiedad. IMPORTANTE: Solo usar cuando el cliente YA HAYA PROPORCIONADO una fecha y hora específicas. Si el cliente dice "sí quiero agendar" pero NO ha dado fecha, NO uses esta herramienta - primero pregúntale qué día y hora le conviene.',
     input_schema: {
       type: 'object',
       properties: {
         resumen: { type: 'string', description: 'Título de la cita, ej: Visita a propiedad' },
         fecha: { type: 'string', description: 'Fecha que el CLIENTE proporcionó. Formato: YYYY-MM-DD. NO inventes fechas.' },
         hora_inicio: { type: 'string', description: 'Hora que el CLIENTE proporcionó. Formato: HH:MM (24hrs)' },
-        duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' },
-        email_cliente: { type: 'string', description: 'Email del cliente para enviarle la invitación. OBLIGATORIO si ya se tiene.' }
+        duracion_minutos: { type: 'number', description: 'Duración en minutos, default 60' }
       },
       required: ['resumen', 'fecha', 'hora_inicio']
-    }
-  },
-  {
-    name: 'consultar_disponibilidad',
-    description: 'Consulta los horarios OCUPADOS en el calendario para una fecha específica. USAR SIEMPRE antes de agendar una cita o cuando el cliente pregunte qué horarios tienes disponibles.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        fecha: { type: 'string', description: 'Fecha a consultar. Formato: YYYY-MM-DD. Si es "hoy", usa la fecha actual.' }
-      },
-      required: ['fecha']
     }
   }
 ];
@@ -1280,7 +978,7 @@ const tools = [
 // ============================================================================
 async function consultarDocumentos({ tipo, zona, presupuesto }) {
   log('🔍', 'Consultando documentos', { tipo, zona, presupuesto });
-
+  
   try {
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/documents.readonly']);
     const docs = google.docs({ version: 'v1', auth });
@@ -1299,7 +997,7 @@ async function consultarDocumentos({ tipo, zona, presupuesto }) {
     // Verificar si la zona solicitada existe en el documento
     const zonaLower = (zona || '').toLowerCase();
     const zonaEnDocumento = zonaLower ? fullText.toLowerCase().includes(zonaLower) : true;
-
+    
     // Si la zona NO está en el documento, indicarlo claramente
     if (zonaLower && !zonaEnDocumento) {
       log('⚠️', `Zona "${zona}" NO encontrada en documento`);
@@ -1319,20 +1017,14 @@ NO INVENTES propiedades. Solo menciona las que aparecen en el documento.`,
       };
     }
 
-    // Extraer URLs de imágenes del documento ANTES de limpiar el texto
+    // Extraer URLs de imágenes del documento
     let imagenesExtraidas = extraerImagenesDeTexto(fullText);
     log('🖼️', `Imágenes encontradas en documento: ${imagenesExtraidas.length}`);
 
-    // NO eliminamos las líneas de fotos para mantener el contexto
-    // Claude necesita ver qué foto pertenece a qué propiedad
-    // Las reglas del System Prompt ya evitan que las envíe automáticamente
-
-    log('📝', `Contenido obtenido. Longitud: ${fullText.length} caracteres`);
-
-    return {
-      success: true,
-      content: fullText,  // Contenido COMPLETO con URLs de fotos en su lugar correcto
-      imagenes: [],       // Ya no enviamos lista separada para evitar confusión
+    return { 
+      success: true, 
+      content: fullText,
+      imagenes: imagenesExtraidas,
       busqueda: { tipo, zona, presupuesto }
     };
   } catch (error) {
@@ -1351,21 +1043,21 @@ function obtenerImagenesPrueba(tipo) {
     'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80', // Casa con jardín
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80', // Casa elegante
   ];
-
+  
   const imagenesTerrenos = [
     'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80', // Terreno verde
     'https://images.unsplash.com/photo-1628624747186-a941c476b7ef?w=800&q=80', // Terreno amplio
     'https://images.unsplash.com/photo-1595880500386-4b33823094d4?w=800&q=80', // Terreno con vista
   ];
-
+  
   const imagenesDepartamentos = [
     'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80', // Depto moderno
     'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80', // Sala depto
     'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80', // Depto con vista
   ];
-
+  
   const tipoLower = (tipo || '').toLowerCase();
-
+  
   if (tipoLower.includes('terreno') || tipoLower.includes('lote')) {
     return imagenesTerrenos;
   } else if (tipoLower.includes('depa') || tipoLower.includes('departamento') || tipoLower.includes('apartamento')) {
@@ -1381,18 +1073,18 @@ function obtenerImagenesPrueba(tipo) {
 // ============================================================================
 function extraerImagenesDeTexto(texto) {
   const imagenes = [];
-
+  
   // Patrones para detectar URLs de imágenes
   // Formato 1: IMAGEN: https://...
   // Formato 2: Foto: https://...
   // Formato 3: URLs directas de imágenes (.jpg, .jpeg, .png, .webp)
-
+  
   const patronImagen = /(?:IMAGEN|FOTO|IMG|IMAGE):\s*(https?:\/\/[^\s]+)/gi;
   const patronUrlDirecta = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))/gi;
   const patronDrive = /(https?:\/\/drive\.google\.com\/[^\s]+)/gi;
-
+  
   let match;
-
+  
   // Buscar formato IMAGEN: url
   while ((match = patronImagen.exec(texto)) !== null) {
     const url = match[1].trim();
@@ -1401,7 +1093,7 @@ function extraerImagenesDeTexto(texto) {
       log('🖼️', `Imagen encontrada (etiqueta, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
-
+  
   // Buscar URLs directas de imágenes
   while ((match = patronUrlDirecta.exec(texto)) !== null) {
     const url = match[1].trim();
@@ -1410,7 +1102,7 @@ function extraerImagenesDeTexto(texto) {
       log('🖼️', `Imagen encontrada (URL directa, corchetes): [${url.substring(0, 50)}...]`);
     }
   }
-
+  
   // Buscar URLs de Google Drive (convertir a formato directo)
   while ((match = patronDrive.exec(texto)) !== null) {
     let url = match[1].trim();
@@ -1425,96 +1117,49 @@ function extraerImagenesDeTexto(texto) {
       }
     }
   }
-
+  
   return imagenes;
 }
 
-// Función enviarMensajeConImagen eliminada
-
 // ============================================================================
-// EJECUTAR HERRAMIENTA: CONSULTAR DISPONIBILIDAD
+// ENVIAR MENSAJE CON IMAGEN POR WHATSAPP
 // ============================================================================
-async function consultarDisponibilidad({ fecha }) {
-  log('📅', '=== CONSULTANDO DISPONIBILIDAD ===', { fecha });
-
+async function enviarMensajeConImagen(client, from, to, body, mediaUrl) {
   try {
-    const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar.readonly']);
-    const calendar = google.calendar({ version: 'v3', auth });
-    const calendarId = process.env.GOOGLE_CALENDAR_ID;
-
-    if (!calendarId) {
-      return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
-    }
-
-    // Definir inicio y fin del día en la zona horaria correcta
-    const [year, month, day] = fecha.split('-').map(Number);
-    const timeMin = DateTime.fromObject({ year, month, day, hour: 0, minute: 0, second: 0 }, { zone: CONFIG.TIMEZONE }).toISO();
-    const timeMax = DateTime.fromObject({ year, month, day, hour: 23, minute: 59, second: 59 }, { zone: CONFIG.TIMEZONE }).toISO();
-
-    log('📅', `Consultando rango: ${timeMin} a ${timeMax}`);
-
-    const response = await calendar.events.list({
-      calendarId,
-      timeMin,
-      timeMax,
-      singleEvents: true,
-      orderBy: 'startTime'
+    log('🖼️', `Enviando imagen: ${mediaUrl.substring(0, 50)}...`);
+    
+    const mensaje = await client.messages.create({
+      from: from,
+      to: to,
+      body: body || '',
+      mediaUrl: [mediaUrl]
     });
-
-    const eventos = response.data.items || [];
-
-    if (eventos.length === 0) {
-      log('✅', 'No hay eventos, día totalmente libre');
-      return {
-        success: true,
-        mensaje: `El día ${fecha} está totalmente libre. Horario de atención: 9:00 a 18:00.`,
-        disponible: true,
-        eventos: []
-      };
-    }
-
-    // Formatear lista de ocupados para Claude
-    let ocupados = eventos.map(evento => {
-      if (!evento.start.dateTime) return null; // Ignorar eventos de todo el día por ahora si no bloquean hora exacta
-
-      const inicio = DateTime.fromISO(evento.start.dateTime).setZone(CONFIG.TIMEZONE).toFormat('HH:mm');
-      const fin = DateTime.fromISO(evento.end.dateTime).setZone(CONFIG.TIMEZONE).toFormat('HH:mm');
-      return `- OCUPADO de ${inicio} a ${fin}`;
-    }).filter(Boolean).join('\n');
-
-    log('⚠️', `Encontrados ${eventos.length} eventos`);
-
-    return {
-      success: true,
-      mensaje: `Horarios ocupados para el ${fecha}:\n${ocupados}\n\nINSTRUCCIÓN PARA EL AGENTE: Ofrece horarios que NO se traslapen con estos.`,
-      disponible: true,
-      ocupados_texto: ocupados
-    };
-
+    
+    log('✅', `Imagen enviada exitosamente. SID: ${mensaje.sid}`);
+    return { success: true, sid: mensaje.sid };
   } catch (error) {
-    log('❌', 'Error al consultar disponibilidad', error);
+    log('❌', `Error enviando imagen: ${error.message}`);
     return { success: false, error: error.message };
   }
 }
 
-
 // ============================================================================
 // EJECUTAR HERRAMIENTA: AGENDAR CITA
 // ============================================================================
-async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60, email_cliente }) {
+async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60 }) {
   log('📅', '=== INICIANDO AGENDAR CITA ===');
-  log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos, email_cliente });
-
+  log('📅', 'Datos recibidos:', { resumen, fecha, hora_inicio, duracion_minutos });
+  
   try {
     log('🔑', 'Obteniendo autenticación de Google...');
     const auth = getGoogleAuth(['https://www.googleapis.com/auth/calendar']);
-
+    
     log('📅', 'Creando cliente de Calendar...');
     const calendar = google.calendar({ version: 'v3', auth });
-
+    
     const calendarId = process.env.GOOGLE_CALENDAR_ID;
     log('📅', `Calendar ID configurado: ${calendarId}`);
-
+    
     if (!calendarId) {
       log('❌', 'GOOGLE_CALENDAR_ID no está definido!');
       return { success: false, error: 'GOOGLE_CALENDAR_ID no configurado' };
@@ -1536,11 +1181,11 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
     const [horas, minutos] = hora_inicio.split(':').map(Number);
 
     const inicio = DateTime.fromObject(
-      { year, month, day, hour: horas, minute: minutos },
+      { year, month, day, hour: horas, minute: minutos }, 
       { zone: CONFIG.TIMEZONE }
     );
     const fin = inicio.plus({ minutes: duracion_minutos });
-
+    
     log('📅', `Inicio: ${inicio.toISO()}, Fin: ${fin.toISO()}`);
 
     const eventData = {
@@ -1548,22 +1193,14 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
       start: { dateTime: inicio.toISO(), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: fin.toISO(), timeZone: CONFIG.TIMEZONE },
       // Agregar descripción para identificar el evento
-      description: `Cita agendada automáticamente por el Agente WhatsApp.\nCliente: ${email_cliente || 'No especificado'}\nFecha de creación: ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss')}`
+      description: `Cita agendada automáticamente por el Agente WhatsApp.\nFecha de creación: ${DateTime.now().setZone(CONFIG.TIMEZONE).toFormat('yyyy-MM-dd HH:mm:ss')}`
     };
-
-    // Agregar asistente si hay email
-    if (email_cliente && email_cliente.includes('@')) {
-      eventData.attendees = [{ email: email_cliente.trim() }];
-      log('📧', `Agregando invitacion para: ${email_cliente}`);
-    }
-
     log('📅', 'Evento a crear:', eventData);
 
     log('📅', 'Insertando evento en Google Calendar...');
     const result = await calendar.events.insert({
       calendarId,
-      requestBody: eventData,
-      sendUpdates: 'all'
+      requestBody: eventData
     });
 
     log('✅', '=== CITA AGENDADA EXITOSAMENTE ===');
@@ -1572,7 +1209,7 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
     log('✅', `Organizador: ${result.data.organizer?.email}`);
     log('✅', `Creador: ${result.data.creator?.email}`);
     log('✅', `Status: ${result.data.status}`);
-
+    
     // Verificar que el evento se creó listando eventos
     try {
       const eventCheck = await calendar.events.get({
@@ -1583,53 +1220,9 @@ async function agendarCita({ resumen, fecha, hora_inicio, duracion_minutos = 60,
     } catch (verifyError) {
       log('⚠️', `No se pudo verificar el evento: ${verifyError.message}`);
     }
-
-    // ========================================================================
-    // NOTIFICACIÓN AL DUEÑO POR WHATSAPP
-    // ========================================================================
-    const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER;
-    if (ownerNumber) {
-      try {
-        log('📲', '=== ENVIANDO NOTIFICACIÓN AL DUEÑO ===');
-
-        const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        const twilioWhatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER;
-
-        // Formatear el número del dueño correctamente
-        let ownerWhatsapp = ownerNumber.replace(/\D/g, ''); // Solo dígitos
-        if (!ownerWhatsapp.startsWith('52')) {
-          ownerWhatsapp = '52' + ownerWhatsapp; // Agregar código de México si no lo tiene
-        }
-        ownerWhatsapp = 'whatsapp:+' + ownerWhatsapp;
-
-        const notificacion = `🔔 *NUEVA CITA AGENDADA*
-
-📅 *Fecha:* ${inicio.toFormat("EEEE d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}
-👤 *Cliente:* ${email_cliente || 'No proporcionó email'}
-🏠 *Visita:* ${resumen}
-⏱️ *Duración:* ${duracion_minutos} minutos
-
-📌 Ver en calendario: ${result.data.htmlLink}
-
-_Notificación automática del Agente WhatsApp_`;
-
-        await twilioClient.messages.create({
-          from: 'whatsapp:' + twilioWhatsappNumber,
-          to: ownerWhatsapp,
-          body: notificacion
-        });
-
-        log('✅', `Notificación enviada al dueño: ${ownerWhatsapp}`);
-      } catch (notifError) {
-        // No fallar la cita si la notificación falla
-        log('⚠️', `Error enviando notificación al dueño: ${notifError.message}`);
-      }
-    } else {
-      log('ℹ️', 'OWNER_WHATSAPP_NUMBER no configurado, no se envía notificación');
-    }
-
-    return {
-      success: true,
+    
+    return { 
+      success: true, 
       mensaje: `Cita agendada exitosamente para el ${inicio.toFormat("d 'de' MMMM 'a las' HH:mm", { locale: 'es' })}`,
       eventLink: result.data.htmlLink,
       eventId: result.data.id,
@@ -1650,17 +1243,17 @@ _Notificación automática del Agente WhatsApp_`;
 // ============================================================================
 function construirMensajesParaClaude(historial, mensajeActual, estado) {
   let messages = [];
-
+  
   // Agregar historial previo con alternancia correcta
   if (historial.length > 0) {
     let lastRole = null;
-
+    
     for (const msg of historial) {
       const role = msg.direccion === 'inbound' ? 'user' : 'assistant';
       const contenido = msg.mensaje?.trim();
-
+      
       if (!contenido) continue;
-
+      
       // Fusionar mensajes consecutivos del mismo rol
       if (role === lastRole && messages.length > 0) {
         messages[messages.length - 1].content += '\n' + contenido;
@@ -1669,24 +1262,24 @@ function construirMensajesParaClaude(historial, mensajeActual, estado) {
         lastRole = role;
       }
     }
-
+    
     // Asegurar que termine en 'assistant' para que el nuevo 'user' alterne
     while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
       messages.pop();
     }
   }
-
+  
   // Agregar mensaje actual con contexto de estado
   const tipo = estado.tipo_propiedad || 'NO_DEFINIDO';
   const zona = estado.zona || 'NO_DEFINIDO';
   const presupuesto = estado.presupuesto || 'NO_DEFINIDO';
-
+  
   const mensajeConContexto = `[Estado actual del cliente: tipo=${tipo}, zona=${zona}, presupuesto=${presupuesto}]
 
 Mensaje del cliente: ${mensajeActual}`;
-
+  
   messages.push({ role: 'user', content: mensajeConContexto });
-
+  
   return messages;
 }
 
@@ -1699,27 +1292,24 @@ export default async function handler(req, res) {
   }
 
   const { Body, From, MessageSid } = req.body;
-
+  
   if (!Body || !From) {
     return res.status(400).json({ error: 'Faltan parámetros Body o From' });
   }
 
   const telefono = normalizarTelefono(From);
-
-  log('═══════════════════════════════════════════════════════════════');
-  log('🚀', 'VERSION ACTUAL: v5.4.0 (COPIA LIMPIA - SIN ENVIO DE FOTOS)');
-  log('🚫', 'SISTEMA DE FOTOS: DESACTIVADO Y CÓDIGO ELIMINADO');
+  
   log('═══════════════════════════════════════════════════════════════');
   log('📨', `NUEVO MENSAJE de ${telefono}`);
   log('📝', `Contenido: "${Body}"`);
   log('═══════════════════════════════════════════════════════════════');
 
   // Guardar mensaje entrante
-  await guardarMensajeEnSheet({
-    telefono,
-    direccion: 'inbound',
-    mensaje: Body,
-    messageId: MessageSid
+  await guardarMensajeEnSheet({ 
+    telefono, 
+    direccion: 'inbound', 
+    mensaje: Body, 
+    messageId: MessageSid 
   });
 
   try {
@@ -1734,17 +1324,17 @@ export default async function handler(req, res) {
       log('⏰', 'Sesión expirada, reseteando estado automáticamente');
       estadoActual = await resetearEstadoCliente(telefono);
     }
-
+    
     // 2.5 Verificar cliente inactivo para seguimiento (7+ días sin interacción)
     const ahora = DateTime.now().setZone(CONFIG.TIMEZONE);
     if (estadoActual.ultima_actualizacion && estadoActual.etapa !== 'inicial') {
       const ultimaInteraccion = DateTime.fromFormat(
-        estadoActual.ultima_actualizacion.split(' ')[0],
-        'yyyy-MM-dd',
+        estadoActual.ultima_actualizacion.split(' ')[0], 
+        'yyyy-MM-dd', 
         { zone: CONFIG.TIMEZONE }
       );
       const diasInactivo = Math.floor(ahora.diff(ultimaInteraccion, 'days').days);
-
+      
       if (diasInactivo >= 7 && estadoActual.etapa !== 'seguimiento') {
         log('📅', `Cliente inactivo por ${diasInactivo} días. Cambiando a seguimiento.`);
         estadoActual.etapa = 'seguimiento';
@@ -1756,10 +1346,10 @@ export default async function handler(req, res) {
     // 3. Procesar comandos especiales
     log('🎯', 'PASO 2: Verificando comandos especiales...');
     const comandoResult = await procesarComandoEspecial(Body, telefono, estadoActual);
-
+    
     if (comandoResult.esComando) {
       log('⚡', 'Comando especial detectado, respondiendo directamente');
-
+      
       // Enviar respuesta del comando
       const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
       const twilioMsg = await client.messages.create({
@@ -1767,14 +1357,14 @@ export default async function handler(req, res) {
         to: From,
         body: comandoResult.respuesta
       });
-
-      await guardarMensajeEnSheet({
-        telefono,
-        direccion: 'outbound',
-        mensaje: comandoResult.respuesta,
-        messageId: twilioMsg.sid
+      
+      await guardarMensajeEnSheet({ 
+        telefono, 
+        direccion: 'outbound', 
+        mensaje: comandoResult.respuesta, 
+        messageId: twilioMsg.sid 
       });
-
+      
       log('✅', 'Comando procesado exitosamente');
       return res.status(200).json({ success: true, comando: true });
     }
@@ -1786,13 +1376,13 @@ export default async function handler(req, res) {
 
     // 5. Actualizar estado con datos detectados
     const estadoActualizado = actualizarEstadoConDatos(estadoActual, datosDetectados);
-
+    
     // Si hay cambios, guardar inmediatamente
     if (Object.keys(datosDetectados).length > 0) {
       log('💾', 'PASO 4: Guardando estado actualizado...');
       await guardarEstadoConversacion(estadoActualizado);
     }
-
+    
     log('📋', 'Estado final', estadoActualizado);
 
     // 6. Obtener historial
@@ -1824,14 +1414,14 @@ export default async function handler(req, res) {
     const MAX_ITERACIONES = 3;
     let citaAgendadaInfo = null;  // Para guardar info de la cita
     let imagenesParaEnviar = [];  // DESHABILITADO: Ya no enviamos fotos automáticamente
-
+    
     // 10.1 DESHABILITADO: Ya no forzamos envío de fotos
     // El agente solo proporcionará los links en texto si el cliente los pide
     const pideFotos = false; // Deshabilitado
     const claudeLlamoHerramienta = response.stop_reason === 'tool_use';
-
+    
     log('🖼️', `Envío de fotos DESHABILITADO - solo se muestran links en texto`);
-
+    
     /* DESHABILITADO - Ya no enviamos imágenes automáticamente
     if (pideFotos && !claudeLlamoHerramienta) {
       log('🖼️', '⚠️ Usuario pidió fotos pero Claude no usó herramienta - FORZANDO consulta de documentos');
@@ -1859,15 +1449,15 @@ export default async function handler(req, res) {
       }
     }
     */
-
+    
     while (response.stop_reason === 'tool_use' && iteraciones < MAX_ITERACIONES) {
       iteraciones++;
       const toolUse = response.content.find(b => b.type === 'tool_use');
-
+      
       if (!toolUse) break;
 
       log('🔧', `Tool call #${iteraciones}: ${toolUse.name}`, toolUse.input);
-
+      
       let toolResult;
       if (toolUse.name === 'consultar_documentos') {
         toolResult = await consultarDocumentos(toolUse.input);
@@ -1879,8 +1469,6 @@ export default async function handler(req, res) {
           log('🖼️', `Imágenes a enviar: ${imagenesParaEnviar.length}`);
         }
         */
-      } else if (toolUse.name === 'consultar_disponibilidad') {
-        toolResult = await consultarDisponibilidad(toolUse.input);
       } else if (toolUse.name === 'agendar_cita') {
         toolResult = await agendarCita(toolUse.input);
         // Guardar info de la cita para actualizar estado después
@@ -1896,18 +1484,13 @@ export default async function handler(req, res) {
       }
 
       messages.push({ role: 'assistant', content: response.content });
-
-      // CRÍTICO: Enviar el resultado tal cual
-      // Ahora el contenido incluye las fotos en su lugar correcto (asociadas a cada propiedad)
-      let contentParaClaude = JSON.stringify(toolResult);
-
-      messages.push({
-        role: 'user',
-        content: [{
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: contentParaClaude
-        }]
+      messages.push({ 
+        role: 'user', 
+        content: [{ 
+          type: 'tool_result', 
+          tool_use_id: toolUse.id, 
+          content: JSON.stringify(toolResult) 
+        }] 
       });
 
       response = await anthropic.messages.create({
@@ -1944,7 +1527,7 @@ export default async function handler(req, res) {
       await guardarEstadoConversacion(estadoActualizado);
       log('📅', 'Estado actualizado: cita_agendada con fecha:', citaAgendadaInfo);
     }
-
+    
     // 11. Detectar cambio de etapa basado en la respuesta
     const respuestaLower = respuestaTexto.toLowerCase();
     if (respuestaLower.includes('qué día') || respuestaLower.includes('qué fecha') || respuestaLower.includes('qué hora')) {
@@ -1959,7 +1542,7 @@ export default async function handler(req, res) {
     // 12. Enviar por WhatsApp
     log('📤', 'PASO 8: Enviando respuesta por WhatsApp...');
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
+    
     // Primero enviar el mensaje de texto
     const twilioMsg = await client.messages.create({
       from: 'whatsapp:' + process.env.TWILIO_WHATSAPP_NUMBER,
@@ -1967,28 +1550,34 @@ export default async function handler(req, res) {
       body: respuestaTexto
     });
 
-    // 12.5 Enviar imágenes: COMPLETAMENTE ELIMINADO
-    // El agente solo proporciona links en texto cuando se piden
-    log('🖼️', `=== SISTEMA DE FOTOS AUTOMÁTICAS: DESACTIVADO ===`);
-
+    // 12.5 Enviar imágenes si hay
+    // DESHABILITADO: Ya no enviamos imágenes como media messages.
+    // Los links deben ir en el texto si el cliente los pide.
+    log('🖼️', `=== ENVÍO DE IMÁGENES DESHABILITADO ===`);
+    
+    /* CÓDIGO DE IMÁGENES COMPLETAMENTE DESHABILITADO
+    if (imagenesParaEnviar && imagenesParaEnviar.length > 0) {
+      // ... código comentado ...
+    }
+    */
 
     // 13. Guardar respuesta en historial
-    await guardarMensajeEnSheet({
-      telefono,
-      direccion: 'outbound',
-      mensaje: respuestaTexto,
-      messageId: twilioMsg.sid
+    await guardarMensajeEnSheet({ 
+      telefono, 
+      direccion: 'outbound', 
+      mensaje: respuestaTexto, 
+      messageId: twilioMsg.sid 
     });
 
     log('✅', 'PROCESO COMPLETADO EXITOSAMENTE');
     log('═══════════════════════════════════════════════════════════════');
-
+    
     return res.status(200).json({ success: true });
 
   } catch (error) {
-    log('❌', 'ERROR CRÍTICO', {
-      message: error.message,
-      stack: error.stack?.substring(0, 500)
+    log('❌', 'ERROR CRÍTICO', { 
+      message: error.message, 
+      stack: error.stack?.substring(0, 500) 
     });
     return res.status(500).json({ error: error.message });
   }
