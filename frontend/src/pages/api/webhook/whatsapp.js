@@ -9,7 +9,7 @@ import path from 'path';
 // CONFIGURACIÓN
 // ============================================================================
 const CONFIG = {
-  MODEL: 'claude-3-5-sonnet-20241022',
+  MODEL: 'claude-3-5-sonnet-20240620',
   MAX_TOKENS: 1024,
   HISTORIAL_LIMITE: 15,
   TIMEZONE: 'America/Mexico_City',
