@@ -9,7 +9,7 @@ import path from 'path';
 // CONFIGURACIÓN
 // ============================================================================
 const CONFIG = {
-  MODEL: 'claude-3-opus-20240229',
+  MODEL: 'claude-3-haiku-20240307',
   MAX_TOKENS: 1024,
   HISTORIAL_LIMITE: 15,
   TIMEZONE: 'America/Mexico_City',

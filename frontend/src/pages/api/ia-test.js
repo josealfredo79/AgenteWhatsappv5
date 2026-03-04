@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const completion = await anthropic.messages.create({
-      model: 'claude-3-opus-20240229',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 512,
       system: 'Prueba de clave Claude AI',
       messages: [
